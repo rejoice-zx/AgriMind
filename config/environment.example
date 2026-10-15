@@ -1,0 +1,25 @@
+# Copy this template to the repository-root environment file for local development.
+# Fill in your own values; this template contains no working credentials.
+APP_ENV=development
+ENV=development
+DEBUG=False
+
+# Generate a long random value once, keep it stable, and keep the local file out of Git.
+JWT_SECRET_KEY=
+
+# The local launcher initializes and reuses this separately when the value is blank.
+# Direct uvicorn launches require an explicitly configured independent encryption value.
+SETTINGS_ENCRYPTION_KEY=
+
+# Set these for the first administrator initialization. No fixed account is supplied.
+INITIAL_ADMIN_USERNAME=
+INITIAL_ADMIN_PASSWORD=
+ALLOW_DEMO_SEEDING=false
+
+# Optional: AI providers can also be configured from the administrator settings page.
+LLM_API_KEY=
+VISION_API_KEY=
+EMBEDDING_API_KEY=
+WEATHER_API_KEY=
+
+# Database/data/log paths default to paths derived from the project location.

@@ -1,0 +1,48 @@
+# FastAPI and Server
+fastapi>=0.142.2
+starlette>=1.3.1
+uvicorn[standard]>=0.27.0
+# Starlette's multipart/form parser (UploadFile/form) — security floor
+python-multipart>=0.0.31
+
+# Database — the [asyncio] extra pulls greenlet, required by create_async_engine/AsyncSession
+# (SQLAlchemy 2.1 no longer installs greenlet implicitly; a clean install without it fails at import)
+sqlalchemy[asyncio]>=2.0.25
+aiosqlite>=0.19.0
+
+# Authentication
+# python-jose 3.5.0 has no fixed release for CVE-2026-85394; accepted because the
+# vulnerable precondition (decode without an explicit algorithm allow-list) is not
+# met — the only decode site passes algorithms=["HS256"] (see auth_service.verify_token).
+python-jose[cryptography]>=3.3.0
+bcrypt>=4.1.2
+cryptography>=50.0.0
+# ecdsa has no upstream fix for PYSEC-2026-1325 (Minerva timing, signed out of scope);
+# it is only reachable via python-jose's ES* algorithms, which this app never uses.
+ecdsa>=0.19.2
+
+# Validation
+pydantic>=2.5.0
+pydantic-settings>=2.14.2
+email-validator>=2.1.0
+
+# HTTP Client
+httpx>=0.26.0
+requests>=2.33.0
+# Transitive security floors (httpx/requests/uvicorn/starlette ecosystem)
+urllib3>=2.8.0
+anyio>=4.14.2
+idna>=3.15
+click>=8.3.3
+
+# Vector Store and Embeddings
+faiss-cpu>=1.7.4
+numpy>=1.26.0
+
+# Utilities
+python-dotenv>=1.2.2
+aiofiles>=23.2.0
+
+# Testing
+pytest>=9.0.3
+pytest-asyncio>=0.23.0

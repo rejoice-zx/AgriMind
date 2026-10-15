@@ -1,0 +1,72 @@
+# ===== Python =====
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+*.egg-info/
+*.egg
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# ===== Environment variables =====
+.env
+.env.*
+!.env.example
+
+# ===== Backend runtime data =====
+backend/data/
+backend/logs/
+data/app.db
+data/*.db
+*.db
+*.db-journal
+data/vectors.index
+data/vectors_map.json
+data/uploads/
+!data/uploads/.gitkeep
+scratch/
+*.log
+.pytest_tmp/
+
+
+# ===== Frontend =====
+frontend/node_modules/
+node_modules/
+frontend/dist/
+*.tsbuildinfo
+
+# ===== IDEs =====
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ===== OS =====
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Local agent state and generated verification/export artifacts
+/.rivet/
+/.agent/
+/.rivet.md
+/AGENTS.md
+/doc/
+/suggestions/
+/logs/
+/data/
+/dist/
+/agri-build-*/
+/agri-retirement-preview-*/
+/suggestions/**/agrimind-stage-a-*/
+/suggestions/**/agri-build-*/
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+*.sqlite-journal

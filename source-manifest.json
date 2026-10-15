@@ -1,0 +1,1677 @@
+{
+  "created_at": "2026-10-15T16:37:31.208037+08:00",
+  "file_count": 334,
+  "scope": "Application source, README, configuration template and screenshots; no agent guidance, development reviews/design documents, Git history, deployment files, local agent state, runtime data or generated test/build snapshots.",
+  "files": [
+    {
+      "path": ".github/workflows/verify.yml",
+      "sha256": "1c1570754f2ce1a5a0065fab030cabbba85e3f67f22f49bcbe6303478e50bb22",
+      "bytes": 1748
+    },
+    {
+      "path": ".gitignore",
+      "sha256": "c3882d29159028d6892a94618586420618a2e4cd6d9c61984bee5c2d932089d7",
+      "bytes": 901
+    },
+    {
+      "path": "LICENSE",
+      "sha256": "f43775878c7bdceea7b912642cff0294e8d59a59fa1c26c77ed1f78b8c03f536",
+      "bytes": 1067
+    },
+    {
+      "path": "README.md",
+      "sha256": "bdab4462bc29e85df3b8619a59f21067211950a46bc8d034e1155a56ae80a596",
+      "bytes": 17073
+    },
+    {
+      "path": "backend/app/__init__.py",
+      "sha256": "1dd8ca496690fbb2b4ed3929283d552d3e364da1b765ffa58b7587756669e3f2",
+      "bytes": 31
+    },
+    {
+      "path": "backend/app/api/__init__.py",
+      "sha256": "1fc1e9c2ee49bec477a687fae2c5d7ef22186cf0e9d83551d500877d6a6eccac",
+      "bytes": 1131
+    },
+    {
+      "path": "backend/app/api/agri_agent.py",
+      "sha256": "cc12f5a6027c53d18688682998abf66cadc613aa57f21f55ff0b9fa1813fc942",
+      "bytes": 4671
+    },
+    {
+      "path": "backend/app/api/agri_history.py",
+      "sha256": "3e27e26afafbb4f00e09a02d9af878216549735cdafb12f77c99498fddfb6573",
+      "bytes": 7327
+    },
+    {
+      "path": "backend/app/api/agri_plan.py",
+      "sha256": "ade58209f9f3aeb52da453241a77b28ea265555fa6b480683ea863e8d7823ea6",
+      "bytes": 2729
+    },
+    {
+      "path": "backend/app/api/auth.py",
+      "sha256": "aae0138a72016ecc040b5b7e8f1bbd050b638322ebfb18a6454e021b35b1c15d",
+      "bytes": 10709
+    },
+    {
+      "path": "backend/app/api/backup.py",
+      "sha256": "e486879477b73417894ed89762870385aa17de2bc0ca90c11b3198a52939dd09",
+      "bytes": 6220
+    },
+    {
+      "path": "backend/app/api/dependencies.py",
+      "sha256": "9b829c2ec7dd24c9e357f961825fbf6af98c60e4f73e28bf66f6449e66a45867",
+      "bytes": 8267
+    },
+    {
+      "path": "backend/app/api/expert_workbench.py",
+      "sha256": "8fb3f01e17f2ecbc2492e5b11dae7735634d183cedfb02c7a7ddc1072074efe1",
+      "bytes": 14059
+    },
+    {
+      "path": "backend/app/api/farming_records.py",
+      "sha256": "974dee8e2149ce3b6608782a369a06f4135e4a0bb30b9e0a67568ae72e920fda",
+      "bytes": 17434
+    },
+    {
+      "path": "backend/app/api/farms.py",
+      "sha256": "f6cadd2c2a097411dbaba0427ae6a00233e30a7a6cf6447585f400682ff91cdd",
+      "bytes": 13905
+    },
+    {
+      "path": "backend/app/api/knowledge.py",
+      "sha256": "1cb6b7bc1786816b1dbe4806f9bc522b44ac26bdcf339bdfcbc298dbe43c8d4f",
+      "bytes": 17733
+    },
+    {
+      "path": "backend/app/api/logs.py",
+      "sha256": "1fb4e6720703eb9ea56d13ed6211168f48c0fec5e7d1ecd6ebbbd0dc6421977c",
+      "bytes": 5232
+    },
+    {
+      "path": "backend/app/api/performance.py",
+      "sha256": "08a153272fac6bf316e8a1ae88cf632cfac6bd7de271e9721dbf20b15a5d04a9",
+      "bytes": 4577
+    },
+    {
+      "path": "backend/app/api/settings.py",
+      "sha256": "30b0d326abe6bd3fbd781e56b8cac92842a335d85f741566ac7c3d507a31edeb",
+      "bytes": 21891
+    },
+    {
+      "path": "backend/app/api/statistics.py",
+      "sha256": "e53d01cc7c14578c7a97ac0d6ec8ec0ed50462fdbf325b419004c1f744aded3f",
+      "bytes": 1871
+    },
+    {
+      "path": "backend/app/api/users.py",
+      "sha256": "c4e27fab7d2651e1b32b2f9a52e399d7a23d38d321535863b000fff94f8a1b61",
+      "bytes": 16850
+    },
+    {
+      "path": "backend/app/config.py",
+      "sha256": "bf2f6fc6b6fe0b900e4b978edd2364cf26dc8e62619c4168badd7baf9bb3490b",
+      "bytes": 4765
+    },
+    {
+      "path": "backend/app/core/__init__.py",
+      "sha256": "25015232ccc61cb3ff162a17cdeba1eecd5423893752264e3769f417ce5c6930",
+      "bytes": 94
+    },
+    {
+      "path": "backend/app/core/agri_statistics_indexes.py",
+      "sha256": "54f5e3f49c3f8f850656a530a29fa0ab78e57ec3cb96fae486755b22752a8e0b",
+      "bytes": 1029
+    },
+    {
+      "path": "backend/app/core/analysis_lifecycle.py",
+      "sha256": "c1115caaefa1b41f213d7e8fc97cbf0ee76f71d1074715b77ee73f7fe017e8f0",
+      "bytes": 4077
+    },
+    {
+      "path": "backend/app/core/audit_logging.py",
+      "sha256": "5b43198e7ee75a3a3fc9e9ce75b5382a5af3ecaeec88743d8ce39e15d0f4fdc1",
+      "bytes": 3446
+    },
+    {
+      "path": "backend/app/core/confidence_policy.py",
+      "sha256": "7334ad0d400134cc1dfc14fb8ba7d5a40036b051363eb4e0da8cefb13fcff52c",
+      "bytes": 1125
+    },
+    {
+      "path": "backend/app/core/config.py",
+      "sha256": "5a33b1d17ee986c5012dfc68d1a5733e14b72ce1054b62269f039735c6903c68",
+      "bytes": 4522
+    },
+    {
+      "path": "backend/app/core/copy_upgrade.py",
+      "sha256": "add56c701a42088b18639e48d0eac8de8cee1d918687cb435ab914831e0b8efb",
+      "bytes": 5325
+    },
+    {
+      "path": "backend/app/core/embedding.py",
+      "sha256": "a254494ab6a8af33dcd42eed6a0674d15af59c132cb9bbdaaaf902822dd538aa",
+      "bytes": 12212
+    },
+    {
+      "path": "backend/app/core/embedding_contract.py",
+      "sha256": "7a7c5abc3b68ac7f7f6523bf565fe077ea3703e3d12b419b01877c9c2bdee1c4",
+      "bytes": 2820
+    },
+    {
+      "path": "backend/app/core/field_environment.py",
+      "sha256": "8db88960224b8c7a773f9f2539fbda7a1b13d1dc30472b5673ef6f0d43948e6c",
+      "bytes": 3733
+    },
+    {
+      "path": "backend/app/core/gdd.py",
+      "sha256": "6a8ce5f663bd7c97756e0c1303a4cbb6cb25ad3614a0f11c7e30e417a54924ee",
+      "bytes": 2063
+    },
+    {
+      "path": "backend/app/core/inference_budget.py",
+      "sha256": "607e95a0ff2307e8b916bd44ce360cf643b76705bcfd6835ba72053c4ad82030",
+      "bytes": 599
+    },
+    {
+      "path": "backend/app/core/intent_rules.py",
+      "sha256": "816ca2c0e0d26ab05dc7a6a228c31fcec30bf3c96ac61fd32d2e8e29290070cb",
+      "bytes": 8190
+    },
+    {
+      "path": "backend/app/core/knowledge_contract.py",
+      "sha256": "e70ab8b763be4c620aa170f99590339ff9972709f271a64434778e6b3b5762c3",
+      "bytes": 6267
+    },
+    {
+      "path": "backend/app/core/llm_providers.py",
+      "sha256": "30f7ec7be9d8e5734ba46038fee7a4624e28f620480be7124f85c1b3384821a5",
+      "bytes": 7851
+    },
+    {
+      "path": "backend/app/core/model_base.py",
+      "sha256": "4dfc1a7635e250633fdfbbbe62e151faf3358af59899623b436a81f04de8673f",
+      "bytes": 163
+    },
+    {
+      "path": "backend/app/core/operation_observation.py",
+      "sha256": "4f2a13b147516cbdccc96db6f0b9487b5402cc9a36c3d83ea94d2092eaaff66d",
+      "bytes": 4194
+    },
+    {
+      "path": "backend/app/core/pesticide_standards.py",
+      "sha256": "e5f9a1729e6107c4e88abbd475671246f302fc53a7abfadb253fecd63e3e7403",
+      "bytes": 8340
+    },
+    {
+      "path": "backend/app/core/recovery_bundle.py",
+      "sha256": "099309c89409db773af82d8232c83dbc06bcf95ab9bad8edbd4d66cc868955ee",
+      "bytes": 10285
+    },
+    {
+      "path": "backend/app/core/roles.py",
+      "sha256": "5b45b28dbb293ce1c00d51f29c3bdf2946073bfdb00a37a6e73a1aed32044af6",
+      "bytes": 2226
+    },
+    {
+      "path": "backend/app/core/schema_revision.py",
+      "sha256": "d39870e810ccb907d16063a4f18f33dfe1e31ca607658753f2913f347b56de81",
+      "bytes": 7310
+    },
+    {
+      "path": "backend/app/core/storage_readiness.py",
+      "sha256": "70a43b00679b412b1c458a27e10be34560bed89cf9e579e4d5e7cfe936786255",
+      "bytes": 1174
+    },
+    {
+      "path": "backend/app/core/submission.py",
+      "sha256": "73289f57bfb316b7e992ed8324de70fdb1c0460b4d5197233b5c05adf70882e7",
+      "bytes": 943
+    },
+    {
+      "path": "backend/app/core/vector_store.py",
+      "sha256": "8d1d6419b5c0ace9ea6f58842b89ea1733a489d95e85eea374b5b560d40c1669",
+      "bytes": 50470
+    },
+    {
+      "path": "backend/app/core/weather_policy.py",
+      "sha256": "8b1164a68dd2f7a688dd595c4276c5d86ad9aa92b5fe76701624f038e1ade7a8",
+      "bytes": 2494
+    },
+    {
+      "path": "backend/app/data/china_region_reference_points.json",
+      "sha256": "051087b5efb419a36832c73efefe5d8c710453c43c239db5bbbc60f690bfb3d9",
+      "bytes": 277645
+    },
+    {
+      "path": "backend/app/data/china_region_reference_points_LICENSE.txt",
+      "sha256": "cefe0aa99dd2b271aa34b5bb8c6b71f9ce29e7623be6dd7510b3bdcb9d70c81a",
+      "bytes": 1087
+    },
+    {
+      "path": "backend/app/data/china_region_reference_points_SOURCE.md",
+      "sha256": "00191971184d27cbc23d88a39671fea7d6ea5005192571c5700d86d16a122045",
+      "bytes": 1849
+    },
+    {
+      "path": "backend/app/data/china_regions_2023.json",
+      "sha256": "83b7536f853ad16beb4d37b92890a3fd7bb9d33d4f37e7c8885fb948749a9bc4",
+      "bytes": 136996
+    },
+    {
+      "path": "backend/app/data/china_regions_2023_SOURCE.md",
+      "sha256": "7b7e4547a90c7852a0710d534cf76306a265f64446d5b1885cba474ef0b63102",
+      "bytes": 714
+    },
+    {
+      "path": "backend/app/database.py",
+      "sha256": "ead58e4a11cf2664950559959167ca593e1391818094f65c6cca9b8f087d67f7",
+      "bytes": 13891
+    },
+    {
+      "path": "backend/app/main.py",
+      "sha256": "091e151f774d7b304621cd7d9a873610e980c3b786b2d747a313ad56ca9b7d6e",
+      "bytes": 10821
+    },
+    {
+      "path": "backend/app/middleware/__init__.py",
+      "sha256": "8e0b8db477d37386ff8717524597e7b8239b9f27bd55d50e3c5669b8ca687383",
+      "bytes": 96
+    },
+    {
+      "path": "backend/app/middleware/agri_performance.py",
+      "sha256": "4a0a2962f6d82bdc05a7c955538aa1c9dfc79c565d1574889697974cb845819f",
+      "bytes": 2975
+    },
+    {
+      "path": "backend/app/middleware/audit_context.py",
+      "sha256": "28d052738df8a648c1fd469a9ef55e44029ffd39df6e3eaecae6a41f292aacdc",
+      "bytes": 1775
+    },
+    {
+      "path": "backend/app/middleware/rate_limit.py",
+      "sha256": "cad99b488c2c15ce295c22c3402fc3158d8960f207448762c0b169a24b3bbd8e",
+      "bytes": 7627
+    },
+    {
+      "path": "backend/app/migrations/__init__.py",
+      "sha256": "17bdc49642afd7412c1dc9c6e333c774477cd0ca21de5a822a4b7f677520d2c6",
+      "bytes": 35
+    },
+    {
+      "path": "backend/app/migrations/migrate_auth_subject.py",
+      "sha256": "1d2979615dea32d05cb6750a7486bea495a0183da37b7c626a76282853d788f4",
+      "bytes": 1743
+    },
+    {
+      "path": "backend/app/migrations/migrate_field_environment.py",
+      "sha256": "5b452de70de6d6713e18e725fae2abebc4a5e68e12051e8516c19cd985ae0eba",
+      "bytes": 396
+    },
+    {
+      "path": "backend/app/migrations/migrate_issue2.py",
+      "sha256": "2ab29a41ec1e5cc07e045afd615d8032f9aacbebb25e13fb1577c12b73eca9c1",
+      "bytes": 838
+    },
+    {
+      "path": "backend/app/migrations/migrate_json_to_sqlite.py",
+      "sha256": "1021e9b135815a45e3d58d25800b85037037f0806d0fbdcbb05418f9a225cae5",
+      "bytes": 17422
+    },
+    {
+      "path": "backend/app/migrations/migrate_legacy_columns.py",
+      "sha256": "9b0d86276d6d097db1d38daefc44049c4d5439ba4910db6ef17be866bcfc9f40",
+      "bytes": 2272
+    },
+    {
+      "path": "backend/app/migrations/migrate_registration_review.py",
+      "sha256": "fa7e37e4de02333f8ec3902741b6d968eaa7bb12bf627f81d6b74ebf389f45e5",
+      "bytes": 818
+    },
+    {
+      "path": "backend/app/migrations/schema_upgrade.py",
+      "sha256": "41174464d0dca625f3860303909a5099263b139cff41184f5de2aa396b33eb5f",
+      "bytes": 8264
+    },
+    {
+      "path": "backend/app/migrations/schema_upgrade_v6.py",
+      "sha256": "0445ea5d66f324122b37c95df7ac2c8a0bca8bdc39d43d6175a93d258015cbb8",
+      "bytes": 5118
+    },
+    {
+      "path": "backend/app/models/__init__.py",
+      "sha256": "5411b3c1237baaade0bec813535492f363afdc75d93db8917219f7b8f1667fa8",
+      "bytes": 1738
+    },
+    {
+      "path": "backend/app/models/agri_conversation.py",
+      "sha256": "3080a0880bb42ba92b9205f1589a14adf09b712ee3809b0c348fdc91a2d265fb",
+      "bytes": 3222
+    },
+    {
+      "path": "backend/app/models/agri_plan_snapshot.py",
+      "sha256": "be05b33576c37d23666b6b37029a85a350bf5c3cbc8a627802cf72731fe0b05b",
+      "bytes": 769
+    },
+    {
+      "path": "backend/app/models/consultation_review.py",
+      "sha256": "7388d2aaecdcd79c646f358f8a47aa3a554b02a57d7396b41f3517bf1fe7043e",
+      "bytes": 945
+    },
+    {
+      "path": "backend/app/models/conversation.py",
+      "sha256": "e05f2701361aef18535f84ff91b286ac964805950108501a513d0b747335cd2e",
+      "bytes": 3001
+    },
+    {
+      "path": "backend/app/models/crop.py",
+      "sha256": "2b9355c6dd2dbfe6b4fe1107007a645635ff3013caf004653031c5ae0bea15ef",
+      "bytes": 1896
+    },
+    {
+      "path": "backend/app/models/crop_status_event.py",
+      "sha256": "f540c1cd09fb446b8d6b2dca402e471bf5b94f2620987660e4d6d5f53de4de90",
+      "bytes": 1010
+    },
+    {
+      "path": "backend/app/models/diagnosis_media.py",
+      "sha256": "ebdb45863a2f9ae32401232d3f460e34d1019abb214c3ac05cfb2106927677f4",
+      "bytes": 1508
+    },
+    {
+      "path": "backend/app/models/disease_record.py",
+      "sha256": "1c7dec33e6e8f7a8b58bac38a46d14b243e11ef7aa01e3b91add1b1d3427564f",
+      "bytes": 2243
+    },
+    {
+      "path": "backend/app/models/disease_review.py",
+      "sha256": "7c2bd26a0cb7368800177a744e0ed9ceb24a11f88d49ff6e7bc2f632d2977793",
+      "bytes": 1302
+    },
+    {
+      "path": "backend/app/models/expert_case.py",
+      "sha256": "6194032583783892117a7342decff2631605cf9c8472824bb71af6e10647aafd",
+      "bytes": 1659
+    },
+    {
+      "path": "backend/app/models/farm.py",
+      "sha256": "e0b31cc284cf4fb0282f4f60b4e0dd9174cecc422372d8efcedbaf7dc85a59a9",
+      "bytes": 1633
+    },
+    {
+      "path": "backend/app/models/farming_record.py",
+      "sha256": "0cb8ee9f1d15b34adf75cd6876a143f12fdf4b924e4da9510b700222a93aeb75",
+      "bytes": 3411
+    },
+    {
+      "path": "backend/app/models/field.py",
+      "sha256": "7317390266adf4280af0f2363955ccedb2d50cf00216b79a038c6b08beb99ec9",
+      "bytes": 1811
+    },
+    {
+      "path": "backend/app/models/field_environment.py",
+      "sha256": "dbcbf7c231b3fcf92145805c1d7e16984cb38fc5f288c998c51c012adad344c5",
+      "bytes": 1275
+    },
+    {
+      "path": "backend/app/models/knowledge.py",
+      "sha256": "6a82e3c314e17f0055b02a575a485a208e50a90a9e373cf06251415f6c09b17b",
+      "bytes": 2918
+    },
+    {
+      "path": "backend/app/models/plan_execution.py",
+      "sha256": "fa83de4e715d2e6864eaa10b34595c03fe26ac5a60f5ead1f90d6c9b6c5c2377",
+      "bytes": 510
+    },
+    {
+      "path": "backend/app/models/product.py",
+      "sha256": "b12237ac4da0d60e0aa78f2246fffae1196de1b8b192e834287a8697f5be5a27",
+      "bytes": 1015
+    },
+    {
+      "path": "backend/app/models/settings.py",
+      "sha256": "0316c582387b3b444e5be543327ec6b32edc9427273f0a94e3778b690724234d",
+      "bytes": 528
+    },
+    {
+      "path": "backend/app/models/statistics.py",
+      "sha256": "17697510cffb5931002efa346caed350ad5bdcecd4d39f71bef709521424ef5d",
+      "bytes": 1058
+    },
+    {
+      "path": "backend/app/models/user.py",
+      "sha256": "04dc612744c596298bba4958a8a9d36975f56282e963a9528068d2ab8ccab9a2",
+      "bytes": 1445
+    },
+    {
+      "path": "backend/app/models/weather.py",
+      "sha256": "f04f67d6fe963f4f09906205f488f789e0cc2e711eaee5d3ff0b31baa16ab5be",
+      "bytes": 1470
+    },
+    {
+      "path": "backend/app/schemas/__init__.py",
+      "sha256": "45ef3dc306a9ed6c56944dcffb64001f39e5e2487dfd2249862cf52480d157f2",
+      "bytes": 90
+    },
+    {
+      "path": "backend/app/schemas/agent.py",
+      "sha256": "ce5187e36e806b8759021dbc9b0c490af2ab5386b94c9468d00097175c028539",
+      "bytes": 5416
+    },
+    {
+      "path": "backend/app/schemas/agri_history.py",
+      "sha256": "ddbfe8d90f74248f4e5fccca4ace647324719b765fc6a7215fcd8f85259b1331",
+      "bytes": 2254
+    },
+    {
+      "path": "backend/app/schemas/agri_statistics.py",
+      "sha256": "f65eb64cedcb2eda662befb04463c93cc398c7070f16614ee8129c46cd94f75c",
+      "bytes": 1653
+    },
+    {
+      "path": "backend/app/schemas/agriculture.py",
+      "sha256": "cda5e52d3026699557c2ce0701ec69164f4cbd78e2fc09e4f3664777521075eb",
+      "bytes": 19253
+    },
+    {
+      "path": "backend/app/schemas/auth.py",
+      "sha256": "e2a7941c2f371cdb8d4b4c3013796cf6af291180316117e4f49234c04bee0e8c",
+      "bytes": 2836
+    },
+    {
+      "path": "backend/app/schemas/backup.py",
+      "sha256": "f7ee5a970f74baa92a1276650b66dfed403a5b75c8a566b1e17b5fffcbefa9de",
+      "bytes": 2800
+    },
+    {
+      "path": "backend/app/schemas/consultation_review.py",
+      "sha256": "55c079715e730624f56bf5070a21cbb11eafac4253e312864618dcd676278fd3",
+      "bytes": 1835
+    },
+    {
+      "path": "backend/app/schemas/contact.py",
+      "sha256": "61ffdb432a4e2821d99e713d22d78c97d6ebd9063d1e02fe1219c3a84db59cae",
+      "bytes": 604
+    },
+    {
+      "path": "backend/app/schemas/crop_history.py",
+      "sha256": "7ef7b5caf9b5c7f88958bc0e0a03c44b868f079c00d25621e467ab62c51054ee",
+      "bytes": 1171
+    },
+    {
+      "path": "backend/app/schemas/custom_weather.py",
+      "sha256": "e6db2671c7b9bd957c520b43ec7f9724b249d1cf7fd3fd94f298a5106aab1213",
+      "bytes": 5145
+    },
+    {
+      "path": "backend/app/schemas/expert.py",
+      "sha256": "9805537207d22a836c625ee174e0c43d3ebe49d07ab2f5458ae9542acce7c8ec",
+      "bytes": 5837
+    },
+    {
+      "path": "backend/app/schemas/field_environment.py",
+      "sha256": "278283162630fe82e78cbdac09a9b530a07ea90053b9b4cbf31a7811b1e1143f",
+      "bytes": 2025
+    },
+    {
+      "path": "backend/app/schemas/knowledge.py",
+      "sha256": "a78c37bf85b250a3f6824e97f4eb4d9d7d9164fd13e5e7cc554954fb1cf75b73",
+      "bytes": 7600
+    },
+    {
+      "path": "backend/app/schemas/logs.py",
+      "sha256": "e2ad1730a782da991d3d67ba26602ede06e3be8a52bc677ce188c3232c57de93",
+      "bytes": 1731
+    },
+    {
+      "path": "backend/app/schemas/performance.py",
+      "sha256": "67011c21ccade6615de498b9b1311e73c244d7d1737642230f14c81f6a48bc25",
+      "bytes": 2448
+    },
+    {
+      "path": "backend/app/schemas/settings.py",
+      "sha256": "e78717ad8f99f71da527f6aa9ec7188c7786ca037760d8100b6243e42ad593f0",
+      "bytes": 10035
+    },
+    {
+      "path": "backend/app/schemas/weather.py",
+      "sha256": "48ad15694d8f82a0078ff45487fe64a9b2d743bb598b20b02f104cf4f2fea498",
+      "bytes": 2135
+    },
+    {
+      "path": "backend/app/services/__init__.py",
+      "sha256": "240a5516dd723a20b1f590dfe97b631261bcbd15dc1fbd79aad737e66272e4aa",
+      "bytes": 235
+    },
+    {
+      "path": "backend/app/services/agent_service.py",
+      "sha256": "ea1fe312019e50116250e81f5027ff0be1e1d1ad88db43de9ec89f300f5b9086",
+      "bytes": 61839
+    },
+    {
+      "path": "backend/app/services/agri_history_service.py",
+      "sha256": "65830096d75be2e7642002c27872c82327f4c361912ccb1ad5c54c17bad25cff",
+      "bytes": 15976
+    },
+    {
+      "path": "backend/app/services/agri_plan_service.py",
+      "sha256": "5ab84e2713e421c0bc264316fa703487fb09ea5fc85cfdc1f8f92ae688dc2ad7",
+      "bytes": 20322
+    },
+    {
+      "path": "backend/app/services/agri_retrieval_service.py",
+      "sha256": "4ef221dedc0978d5c2778e1a530877fe8104205cf8be74a77758266981b7f77a",
+      "bytes": 5907
+    },
+    {
+      "path": "backend/app/services/agri_statistics_service.py",
+      "sha256": "7e95bb2a8261c157c070bc468fdd2c60ae90b1dc03a08bbc3de358121aacdc16",
+      "bytes": 10663
+    },
+    {
+      "path": "backend/app/services/auth_service.py",
+      "sha256": "9b4b438d5b70358ec38c20e82c0d38387169e1dbd79335831938e1e7639277cf",
+      "bytes": 12321
+    },
+    {
+      "path": "backend/app/services/backup_service.py",
+      "sha256": "b26730e96fabcdc48d4b0fd8db78492cde8aa501068b138252fd5630c40459bb",
+      "bytes": 17889
+    },
+    {
+      "path": "backend/app/services/consultation_review_service.py",
+      "sha256": "fe28bb455a0ccae3692f9e8f11c2c1cf17b5385c09a1b45db2e002eb11bca86c",
+      "bytes": 15805
+    },
+    {
+      "path": "backend/app/services/crop_history_service.py",
+      "sha256": "c40b278ea6b0c20164b0a09f608947e2f8627c50d84b616022831e832e4de05f",
+      "bytes": 4200
+    },
+    {
+      "path": "backend/app/services/custom_weather_service.py",
+      "sha256": "74f48c4cc018c5616046e3d6c9b5811f0bfa54d1f5b3ea5c85c0a2fa1213d73e",
+      "bytes": 13162
+    },
+    {
+      "path": "backend/app/services/diagnosis_media_service.py",
+      "sha256": "3b924ac34f18b85616c57b0dd7f7bc58339fa915b68a2ab6e1eac774cac71c2f",
+      "bytes": 3940
+    },
+    {
+      "path": "backend/app/services/diagnosis_request_service.py",
+      "sha256": "d6cad31260921e5cdbe0a04b460ebf346f3488266ead48e4ee0a66719a787b08",
+      "bytes": 10194
+    },
+    {
+      "path": "backend/app/services/disease_review_service.py",
+      "sha256": "d9e390f2bc915b31a2ff9192b1164f517683a42613acf234c49109b62b78ed55",
+      "bytes": 13945
+    },
+    {
+      "path": "backend/app/services/expert_service.py",
+      "sha256": "31617d591cc7e94a1e022eb761331506fc13d3dc06e06a4a01a984fdb6f51587",
+      "bytes": 17240
+    },
+    {
+      "path": "backend/app/services/farm_service.py",
+      "sha256": "ee49aee09caa92aca432f995903e5596085313f1721e8f705c3a871a9ee6b471",
+      "bytes": 18992
+    },
+    {
+      "path": "backend/app/services/farming_record_service.py",
+      "sha256": "43b2d016a10526cd61e9a7a10ceccea9b1196b98030f7fcc3fe524f48b6e5ab0",
+      "bytes": 15012
+    },
+    {
+      "path": "backend/app/services/field_environment_service.py",
+      "sha256": "1d02bc59b74eb25285745b6d0b0c21a6d3a43d6a63d5aab75d392a2ac9a82ea4",
+      "bytes": 3462
+    },
+    {
+      "path": "backend/app/services/harvest_safety_service.py",
+      "sha256": "fd1283247134c106739abfa3a3cc88ade868fb9c67604102bb8e651a2ab3fc03",
+      "bytes": 2788
+    },
+    {
+      "path": "backend/app/services/knowledge_service.py",
+      "sha256": "69b787dcd9872d70310ab0fc33fae62ceb26f0189c172f57d0ccd64ae4759a72",
+      "bytes": 28760
+    },
+    {
+      "path": "backend/app/services/legacy_identity_service.py",
+      "sha256": "aa5439825f6483dbb113a121dc657d7d6fa767880102637f6f8c89593b94a9f9",
+      "bytes": 1238
+    },
+    {
+      "path": "backend/app/services/location_service.py",
+      "sha256": "874500d11465227aa33a7613f7180cd6cdf3dfd4ff53629c7cb2a3af6c92ea75",
+      "bytes": 4799
+    },
+    {
+      "path": "backend/app/services/log_service.py",
+      "sha256": "bb914f42c2c698378f509d4fd85d08f710e148ee87be3753548000d73cb3b7ed",
+      "bytes": 9396
+    },
+    {
+      "path": "backend/app/services/model_capabilities.py",
+      "sha256": "9ac21d0ee831f45b2d8e8fef4f33256282f2d262d9ec9c0ad87b652a6630fbc3",
+      "bytes": 4158
+    },
+    {
+      "path": "backend/app/services/model_probe_service.py",
+      "sha256": "e2f5d5e5bccd31870ef0de42e9b1b957eb8a1612afaa28282e8e7f3af6e5df62",
+      "bytes": 12886
+    },
+    {
+      "path": "backend/app/services/performance_service.py",
+      "sha256": "e3846830bef6d2b2b98e93391c183fe8b56f7b5386239947ab1643a3abb6a880",
+      "bytes": 14141
+    },
+    {
+      "path": "backend/app/services/plan_confirmation.py",
+      "sha256": "d9581c5d72eed058369960ca96a2df29a4bce8bec62211be0837060afcce9e2b",
+      "bytes": 1414
+    },
+    {
+      "path": "backend/app/services/rag_service.py",
+      "sha256": "9a4d78c20259a995a2ac74e41aaaeac75a63b7edbff935164166f11c08afc501",
+      "bytes": 37579
+    },
+    {
+      "path": "backend/app/services/seed_agriculture_knowledge.py",
+      "sha256": "6279b05ebdc90f58e302d8d356efcdca9d8f499f42431e25c6c2ed927fc3d8a0",
+      "bytes": 87951
+    },
+    {
+      "path": "backend/app/services/settings_service.py",
+      "sha256": "5231384a9a95e61eea8a31f1ddff19985d71cb8721fd18ad306f0ffb1989a986",
+      "bytes": 25822
+    },
+    {
+      "path": "backend/app/services/vector_service.py",
+      "sha256": "b214567120b9172dc27bfdb1eeeefd650d2451aed0615856300237532a52dcb6",
+      "bytes": 18962
+    },
+    {
+      "path": "backend/app/services/vision_service.py",
+      "sha256": "99b493f6518df9570d683f0f148aed25f3073aac9c5c16e1d427dc25e0353488",
+      "bytes": 22672
+    },
+    {
+      "path": "backend/app/services/weather_requests.py",
+      "sha256": "1a9e1e340a865811cae5df8e3696a9d649249893aef2852117faaf18b2270f8d",
+      "bytes": 804
+    },
+    {
+      "path": "backend/app/services/weather_service.py",
+      "sha256": "9f0ad0970a1f47efda5a20b67ba684f6abc66732e270b212da6f95b5a469054f",
+      "bytes": 15892
+    },
+    {
+      "path": "backend/app/utils/__init__.py",
+      "sha256": "e420028abd6f8d6d3572a61a19a088cfb6dffb6d6244709c92470aaa835503e0",
+      "bytes": 113
+    },
+    {
+      "path": "backend/app/utils/security.py",
+      "sha256": "49e1ca816149253a7cf33efa7e54d3bd16c1de001ea10e47dcd320947dcb6597",
+      "bytes": 2972
+    },
+    {
+      "path": "backend/app/utils/time.py",
+      "sha256": "b8e75e90a895af09d8e722150abab9a49bdf2d29dc55d41fb726d832537008b5",
+      "bytes": 1071
+    },
+    {
+      "path": "backend/pytest.ini",
+      "sha256": "4ad236b1e14dc679f6068b25fe1c2c1e19b45e4d240d219dda3bac840e383509",
+      "bytes": 78
+    },
+    {
+      "path": "backend/requirements.lock",
+      "sha256": "4436deddcf53dec809ded697f6b25bfaa83d9de58b7e9c413da69c281ec4d19f",
+      "bytes": 100348
+    },
+    {
+      "path": "backend/requirements.txt",
+      "sha256": "d07198c272afcbe2b4735b4ec2d77a66736aa6b0559d8f68b02732a76ef88084",
+      "bytes": 1413
+    },
+    {
+      "path": "backend/run.py",
+      "sha256": "34bb33bb574b5784c0ed98bf46d156c2de7ea23cc7002f7d2dda3933add0a22a",
+      "bytes": 3648
+    },
+    {
+      "path": "backend/tests/__init__.py",
+      "sha256": "5571c24ebd18e82bba3b5d0385e23e08927038f456f8ec094416e6fa1027f507",
+      "bytes": 17
+    },
+    {
+      "path": "backend/tests/active_identity_fixtures.py",
+      "sha256": "c944c8d5e26edad114408d65804f12b73e89a5f14204f2fdfafb2987b80c9614",
+      "bytes": 2117
+    },
+    {
+      "path": "backend/tests/conftest.py",
+      "sha256": "bda3187c3c9c6ed1fdfb8f88530730e5f5e37aef376125cdae27693df6de0660",
+      "bytes": 3649
+    },
+    {
+      "path": "backend/tests/legacy_fixtures.py",
+      "sha256": "7e175c12533aa22196cc7da7d1002db1d412aaf8d95864fb445dc16c003c3adf",
+      "bytes": 528
+    },
+    {
+      "path": "backend/tests/test_agent_expert_flag_verification.py",
+      "sha256": "13b452633540d7a5a3ce3078276610a4af7829ce6c6c17967f20c60a4a701ea5",
+      "bytes": 5860
+    },
+    {
+      "path": "backend/tests/test_agent_model_contract.py",
+      "sha256": "eaecccc9f3f9d2dd52a7804175b1cd57228f44c629e6856f80fa0c3110cb410f",
+      "bytes": 7968
+    },
+    {
+      "path": "backend/tests/test_agent_resource_authorization.py",
+      "sha256": "ea116c316bffadb023226b5b5353f68d7ced5a3352639615148935e42379b1d9",
+      "bytes": 9427
+    },
+    {
+      "path": "backend/tests/test_agri_agent.py",
+      "sha256": "e97cb89084ca701411ddba08ff6f9dd4c4261058970fadbeec2af65af388360a",
+      "bytes": 34554
+    },
+    {
+      "path": "backend/tests/test_agri_history.py",
+      "sha256": "fa7943b63cc54ae99e13e13baec0e3a031184ae09675d042068aa9e7003f47fb",
+      "bytes": 19343
+    },
+    {
+      "path": "backend/tests/test_agri_log_audit.py",
+      "sha256": "5ba637df65da5ca0089643ed94a3422247326a869f5853c052a02b01af363ad6",
+      "bytes": 15340
+    },
+    {
+      "path": "backend/tests/test_agri_model_probes.py",
+      "sha256": "65721f090a4a3c2e03471c742acc83edd5b16dc9a061f11e029b7359e402ab52",
+      "bytes": 23263
+    },
+    {
+      "path": "backend/tests/test_agri_observability.py",
+      "sha256": "6e46ebd64c4c8c00bc5c7d97d1c3715d47012ddad28d832c9a615400a0b84d1a",
+      "bytes": 19185
+    },
+    {
+      "path": "backend/tests/test_agri_optimization_a.py",
+      "sha256": "3d8299e79411cc3730bf903c74a3843382323ae64bddc880b6416f6b576a61f1",
+      "bytes": 15068
+    },
+    {
+      "path": "backend/tests/test_agri_plan.py",
+      "sha256": "0ba31aa3626d51f999534a2028e2d4a09932dc7f3956ad56658d40fabc133ee9",
+      "bytes": 17676
+    },
+    {
+      "path": "backend/tests/test_agri_retrieval_config.py",
+      "sha256": "f28b1391643758abcdffed8f30da2c4fb6f9ddcb68c4f2a4bdfd7910d8660c5c",
+      "bytes": 13315
+    },
+    {
+      "path": "backend/tests/test_agriculture_models_and_api.py",
+      "sha256": "e55680721ad6d6b8c0301e1e85ac6624d56fce362960410444eea2b4a924b284",
+      "bytes": 17896
+    },
+    {
+      "path": "backend/tests/test_analysis_lifecycle_smoke.py",
+      "sha256": "c026df2786564b09ef731a3a7e1e8b393dfe085c64575941f3234ff043544987",
+      "bytes": 6262
+    },
+    {
+      "path": "backend/tests/test_archive_metadata_smoke.py",
+      "sha256": "9f9428651a91de3cf305696890413181aa3a0ec273259f3d40373f475768197a",
+      "bytes": 12349
+    },
+    {
+      "path": "backend/tests/test_audit_remediation.py",
+      "sha256": "9dfa6d1ad3e9757dfae2aeb1dcc3fadfd71dbad3d8538732f4e37015430d33d8",
+      "bytes": 10977
+    },
+    {
+      "path": "backend/tests/test_auth.py",
+      "sha256": "33ad6c52ce646b81d718d9e9a6ae076f21259859ad61b479e58018b001f62075",
+      "bytes": 9116
+    },
+    {
+      "path": "backend/tests/test_auth_rate_limits.py",
+      "sha256": "7b8d93535a7bb6aaf23f245a59b6c53e01dcea07346f56d5a829999a06288ca6",
+      "bytes": 6630
+    },
+    {
+      "path": "backend/tests/test_backup.py",
+      "sha256": "9972da6ba2adc5d1ba447e9292f13299b9562905a29ff8e9d0bb9d3d1bcbd5c7",
+      "bytes": 6071
+    },
+    {
+      "path": "backend/tests/test_bootstrap_security.py",
+      "sha256": "393b7d32e4c88e05b09926456942507dc5767a1c90bba8f2755e803c0f4777ad",
+      "bytes": 4443
+    },
+    {
+      "path": "backend/tests/test_config_resolver.py",
+      "sha256": "f79324fb05e0649b0d535cf435879d7a59453514f4cf65c33575584e30a46843",
+      "bytes": 4848
+    },
+    {
+      "path": "backend/tests/test_config_security.py",
+      "sha256": "d8e9a6b61cb98743fa0d6d85fd956a21009e99a0d65ca02868a2c6183c7b74fa",
+      "bytes": 1154
+    },
+    {
+      "path": "backend/tests/test_consultation_review_smoke.py",
+      "sha256": "b98ea512b40b456b28722ad9efb32c0c58841ec8ed938f9e19dbdf82abcb1294",
+      "bytes": 9231
+    },
+    {
+      "path": "backend/tests/test_custom_weather.py",
+      "sha256": "b94ff7c4f3934d63ef44b1b85ea895ccc42c29af0d239225dcf6f766a1c2c2df",
+      "bytes": 18079
+    },
+    {
+      "path": "backend/tests/test_deploy_static_config.py",
+      "sha256": "586cf8263c9a9783f394f998042d2baa373ae7b782f9ba656901a455790028e8",
+      "bytes": 2182
+    },
+    {
+      "path": "backend/tests/test_diagnosis_media_and_requests.py",
+      "sha256": "c402715304af24271a417eca4756fe7aedeb97224e14ebe1dfbd1633ad198855",
+      "bytes": 19892
+    },
+    {
+      "path": "backend/tests/test_diagnosis_record_deletion.py",
+      "sha256": "52b45717817ba20ce3725e5112bf1c10911b749e689bb2115fc08cdf384467d1",
+      "bytes": 4538
+    },
+    {
+      "path": "backend/tests/test_disease_review_lifecycle.py",
+      "sha256": "22b4451fde9d87602d0c7348746435c4e85b9d144d5a80a0aec6b3ad33515e55",
+      "bytes": 16366
+    },
+    {
+      "path": "backend/tests/test_e2e_system.py",
+      "sha256": "74aaaab7d74ccb220c9eb8d5fe95622c9f55b93c360241870e328b4d89cee269",
+      "bytes": 12980
+    },
+    {
+      "path": "backend/tests/test_embedding_generation_identity.py",
+      "sha256": "0465f57cd95c2088cb8a0b78eb236a569e607f639f6cbbf042e18599ee03a036",
+      "bytes": 14466
+    },
+    {
+      "path": "backend/tests/test_embedding_url_security.py",
+      "sha256": "72b8f767ebe4c5752b33961b9cbed1209267f75eaaf7e54764217c3c1205b064",
+      "bytes": 1756
+    },
+    {
+      "path": "backend/tests/test_expert_workbench_and_diagnosis.py",
+      "sha256": "27e5d00ff50cb670e80ffa019b42ae412cd4f615af86f8ee2ce3083bd0611793",
+      "bytes": 22590
+    },
+    {
+      "path": "backend/tests/test_farming_submission_smoke.py",
+      "sha256": "9f1ed050d536675c1274e740429b968d8b55931aed5d849c2c7d365908e67769",
+      "bytes": 3695
+    },
+    {
+      "path": "backend/tests/test_field_environment_smoke.py",
+      "sha256": "de894906b3e5ef9ef51525a37940f08fbf7367f13add99f5cc383c14f1a3731b",
+      "bytes": 11942
+    },
+    {
+      "path": "backend/tests/test_guest_claim_proof.py",
+      "sha256": "55878226ed96df17ec3b0eb43e242335620fa821c61dfce3620802a271769515",
+      "bytes": 8302
+    },
+    {
+      "path": "backend/tests/test_hybrid_rag_and_knowledge.py",
+      "sha256": "0c04aaae73cb12b6c53df52c357ca618aca300951ed075db86bf41c8e85e9c88",
+      "bytes": 15205
+    },
+    {
+      "path": "backend/tests/test_identity_lifecycle.py",
+      "sha256": "f561b18d98c5db02496266159f53ed991b9caee8b9794b2e02a8682530cb2897",
+      "bytes": 5857
+    },
+    {
+      "path": "backend/tests/test_input_bounds.py",
+      "sha256": "62ca2656cfdbe84fbbe745a73954588f41455048dbc03061e433246ed6ed0bd1",
+      "bytes": 4142
+    },
+    {
+      "path": "backend/tests/test_issue2_repairs.py",
+      "sha256": "b990279f9f55b7dbd2bd05f495ff612a1275bf6079b90f796867b793c907d428",
+      "bytes": 15064
+    },
+    {
+      "path": "backend/tests/test_knowledge.py",
+      "sha256": "4f1f7c68da16017605d0ca5e7087e8150ba92342acca6665dde340def065dcc6",
+      "bytes": 13610
+    },
+    {
+      "path": "backend/tests/test_knowledge_transfer_smoke.py",
+      "sha256": "a04421890c7f74fbca34728078a75c7208f7db641203035814108527ed97ace0",
+      "bytes": 7936
+    },
+    {
+      "path": "backend/tests/test_local_database_upgrade_snapshot.py",
+      "sha256": "015e2782adac2f5e00d62b8cb0c0d42a39ef068f6875beca4a4e4268af7d56bd",
+      "bytes": 4221
+    },
+    {
+      "path": "backend/tests/test_models.py",
+      "sha256": "50b332fef6f95a2227596dc4b5a2b75cce7a3187d0fb10a871e2036da74165ca",
+      "bytes": 3367
+    },
+    {
+      "path": "backend/tests/test_operation_observation.py",
+      "sha256": "6e4f30fe5a1acda48f47af22dd724ff34510344ad9d392f6d77dfc110a44798f",
+      "bytes": 13567
+    },
+    {
+      "path": "backend/tests/test_phase1_security_fixes.py",
+      "sha256": "fb82b56351ad374ada2c9150e7fdba6a94a7607d20d4b3b42babb8507460348f",
+      "bytes": 7012
+    },
+    {
+      "path": "backend/tests/test_phase2_logic_fixes.py",
+      "sha256": "826584a7448a46f3aa9e200dda32f650e815d8e59b4da7cd8208dcd935df4f76",
+      "bytes": 5854
+    },
+    {
+      "path": "backend/tests/test_phase3_agricultural_contracts.py",
+      "sha256": "e6ad8dc7739cdf8da2689011bc8715380b9e7d06ea6032694e011acd1d4e8be2",
+      "bytes": 24595
+    },
+    {
+      "path": "backend/tests/test_phase3_interface_fixes.py",
+      "sha256": "e61909e6a5224460a10b6a8287eccf9b0c3e729cec788d11d6ad878cef99bb97",
+      "bytes": 6740
+    },
+    {
+      "path": "backend/tests/test_plan_completion_state.py",
+      "sha256": "c05e000f3d0788496234fce5eb4f6b739c444fa727425d380fdd177bf93197ef",
+      "bytes": 5832
+    },
+    {
+      "path": "backend/tests/test_project_logic_smoke.py",
+      "sha256": "a00d9df9ae4ff7e87d918921ea74c91eac301307910ce61f68e0ea881ae89f0e",
+      "bytes": 3652
+    },
+    {
+      "path": "backend/tests/test_rag_reason_and_confidence.py",
+      "sha256": "a9d6794dbdc7c943fca485a738fd7a9029da4cdd8c3e2b6094d75921b49d2de9",
+      "bytes": 4162
+    },
+    {
+      "path": "backend/tests/test_recovery_bundle_smoke.py",
+      "sha256": "ab8db394bb55a168c5a36b6bce055ab77d10abb38329c57131b8ae3794b6264f",
+      "bytes": 6404
+    },
+    {
+      "path": "backend/tests/test_region_reference_points.py",
+      "sha256": "49d34edcffe6278f9a26d11a3bd373ced32e476a8f379bd6ecb9480adf13e588",
+      "bytes": 4613
+    },
+    {
+      "path": "backend/tests/test_registration_review_and_history.py",
+      "sha256": "15b55938f5da61bd1d49b65dfc9ec49ea6af01eab7ea0b7b47789969948beb5b",
+      "bytes": 10167
+    },
+    {
+      "path": "backend/tests/test_review_security_boundaries.py",
+      "sha256": "e5039e9d918ead3d28fc42a700c26b5b7b336216545f12d9415b98376ee18eaa",
+      "bytes": 7335
+    },
+    {
+      "path": "backend/tests/test_role_matrix.py",
+      "sha256": "0885159fc8cbfb30d6eb5e5c4322beccebcb0ab917c26f9a408747aaf187a147",
+      "bytes": 2330
+    },
+    {
+      "path": "backend/tests/test_runtime_boundaries_smoke.py",
+      "sha256": "1d814564860d7d0c3859a1e426ab2aeaf0c3e6f1e3ed705b617c8b68d39988c6",
+      "bytes": 8810
+    },
+    {
+      "path": "backend/tests/test_schema_upgrade_smoke.py",
+      "sha256": "22fa3f7a51a501888736a4732aa3cbec36720130c5930000867a5b6da8df6271",
+      "bytes": 8354
+    },
+    {
+      "path": "backend/tests/test_security_lifecycle_regression.py",
+      "sha256": "454d8b370e81875e3e6c5bbfba55e55df1bdb8011f085e2ec7d1b77273e467b5",
+      "bytes": 5307
+    },
+    {
+      "path": "backend/tests/test_settings_atomic_and_unavailable.py",
+      "sha256": "e45fc8fda82a85a8a820dd9e71d63e06fa0370e05e3a896c44a178d82eeb7cb2",
+      "bytes": 4140
+    },
+    {
+      "path": "backend/tests/test_settings_cipher_failure.py",
+      "sha256": "d8806608bceaaea929cdf15a76935dcfd2c4e12baee0a6ee5cfd2f17fba635a9",
+      "bytes": 3788
+    },
+    {
+      "path": "backend/tests/test_source_export.py",
+      "sha256": "7fe84082db2c95ef5f0c1639f3287f0c8c94fcf7eedf47da02d4c81cf57b5f3d",
+      "bytes": 4666
+    },
+    {
+      "path": "backend/tests/test_statistics_api.py",
+      "sha256": "b331a5d5d16035e16d4b267baf2a2b97605d59b4042ca75aaf94ab4b4913dd7d",
+      "bytes": 4629
+    },
+    {
+      "path": "backend/tests/test_test_environment_contracts.py",
+      "sha256": "b26144f149e753db1216f4f655b59d51f439a715fa8399683c5d6cca8688edf3",
+      "bytes": 2260
+    },
+    {
+      "path": "backend/tests/test_user_delete_integrity.py",
+      "sha256": "35cdf308d0e514199f6f967039edd1585210f0ccd1b365b15857546c65a4e162",
+      "bytes": 4057
+    },
+    {
+      "path": "backend/tests/test_vector_config_revocation.py",
+      "sha256": "730f5663f368798541999b468b412f3e9ebc7f388f97fbb6b121bb9acd22a1c6",
+      "bytes": 4640
+    },
+    {
+      "path": "backend/tests/test_vector_generation_transactions.py",
+      "sha256": "0f5ba51fe7d6ac2599e4fa44ad51a65084b3e19c728dfe869f2c0f66f0b8399b",
+      "bytes": 15531
+    },
+    {
+      "path": "backend/tests/test_vector_store_concurrency.py",
+      "sha256": "da8d7bc27aa2b5e08a3e0482db84539d72dec01138b3b43b9979e691f1f8b18f",
+      "bytes": 4795
+    },
+    {
+      "path": "backend/tests/test_vector_store_persistence.py",
+      "sha256": "ce6b066954fa2188da848fa0be1a95f6f9ba4e04fe7427631ce8f1f36c4ed42f",
+      "bytes": 5737
+    },
+    {
+      "path": "backend/tests/test_verification_runner.py",
+      "sha256": "d527fc7be618de38cb623057bb54d6077fd9b7db828c354b1a5bda8b7db7ecaa",
+      "bytes": 4306
+    },
+    {
+      "path": "backend/tests/test_vision_result_integrity.py",
+      "sha256": "0fe73333b8cd54d101930c68986362863a944eb84f35ae1854cb15fa5489b962",
+      "bytes": 9804
+    },
+    {
+      "path": "backend/tests/test_visual_diagnosis_authorization.py",
+      "sha256": "026671fd1d1627c211a61eec3e6a74aea19baabc0ff0a0a5e793910045325f81",
+      "bytes": 15970
+    },
+    {
+      "path": "backend/tests/test_weather_request_sharing.py",
+      "sha256": "cbedef328c1e8bc59e8f762d88c6d6d1441c703f0073bcb3a6c809d73325ef07",
+      "bytes": 3492
+    },
+    {
+      "path": "backend/tools/README.md",
+      "sha256": "450517704217f927c75ae92e427aed8a019b1191c7ec9ad702b36a592dcfa3b2",
+      "bytes": 3219
+    },
+    {
+      "path": "backend/tools/check_ai_config.py",
+      "sha256": "a1af4148008f6a5087361ae64a4a4b230b2ef8d1922c8189f0f134f53dfdbe11",
+      "bytes": 3199
+    },
+    {
+      "path": "backend/tools/export_github_source.py",
+      "sha256": "d1e35090f9c5fc745dfec3525a8c6be943319ce694f27427c518e3417592dba4",
+      "bytes": 6033
+    },
+    {
+      "path": "backend/tools/import_region_reference_points.py",
+      "sha256": "ef9da9e4b7d8163a34dacc2c1272d51eb8a30fbae74b2c224595f6b31c3edef3",
+      "bytes": 5185
+    },
+    {
+      "path": "backend/tools/prepare_agri_restore.py",
+      "sha256": "1adb7e1aa352d6923a87cbb0131973ca3a8523e3cc1ed35579858ecf60a92a85",
+      "bytes": 1194
+    },
+    {
+      "path": "backend/tools/run_agri_checks.py",
+      "sha256": "70f1e7d6e2e406a2c8d452320e30330800d7a8b738f9c2bc38814ce100bf3eb8",
+      "bytes": 2644
+    },
+    {
+      "path": "backend/tools/upgrade_agri_copy.py",
+      "sha256": "ec4c7040837e6cb9cf021259776b7b6c5b4dac92652ab7791334a493831e14a8",
+      "bytes": 1315
+    },
+    {
+      "path": "backend/tools/verify_all.ps1",
+      "sha256": "5a336b7532278b1b220fa5faaa71f43d46167ec1f3449aa881b4f11bf0fdf7dc",
+      "bytes": 144
+    },
+    {
+      "path": "backend/tools/verify_all.py",
+      "sha256": "736821ad23387a0abca971781d71e82a456b45e1ff5e786b64a8bc0fb53b2e3d",
+      "bytes": 9850
+    },
+    {
+      "path": "config/environment.example",
+      "sha256": "f962ad83706fd8b95f0bf639d119b5226e8298e849f33d5176dd32844815d6d2",
+      "bytes": 903
+    },
+    {
+      "path": "frontend/index.html",
+      "sha256": "b2c304d293752e73198efe5e3b20c998aaee5d5ee083ccd5fd1bf1b422537f71",
+      "bytes": 414
+    },
+    {
+      "path": "frontend/package-lock.json",
+      "sha256": "830a281a6af540adac2241c10d64b2eda9941104b738272d5b4e762a8461793f",
+      "bytes": 75103
+    },
+    {
+      "path": "frontend/package.json",
+      "sha256": "8d5f0f82f92a217b48dc8eb59a087be4c11b4bad7c9e8f91a3d2ca28ea5aa85a",
+      "bytes": 936
+    },
+    {
+      "path": "frontend/public/favicon.svg",
+      "sha256": "d94dd3a96223bd84d5a5dc121e66eb0b535ac163bf135311a8ced84359af3c36",
+      "bytes": 10512
+    },
+    {
+      "path": "frontend/src/App.vue",
+      "sha256": "baaedad99b4bff48e5301707d8f0c0cb4ab5007e73aa342035c4b1cf4ff82e74",
+      "bytes": 1019
+    },
+    {
+      "path": "frontend/src/api/agriHistory.ts",
+      "sha256": "aa1c12edcdeef883324c1517e6b10862c87c467b6d9c4b2fb6150634b2019215",
+      "bytes": 2188
+    },
+    {
+      "path": "frontend/src/api/agriculture.ts",
+      "sha256": "76a937d34849f0995089628d76d50f1f06cd2cd7cc011ba41cbe99d96ee76157",
+      "bytes": 8743
+    },
+    {
+      "path": "frontend/src/api/auth.ts",
+      "sha256": "2b948186b2fc9039498eef40e60b91688fb11be75fd3874fe69d3dd115c653fc",
+      "bytes": 666
+    },
+    {
+      "path": "frontend/src/api/diagnosisMedia.ts",
+      "sha256": "d69286a6551c9bfa97816dbeeaf0a00ae441aa122260af5ee76b2c30c3007d7e",
+      "bytes": 531
+    },
+    {
+      "path": "frontend/src/api/knowledge.ts",
+      "sha256": "c0fbeefed03aa37d6810b46dde90ee3badcee81182da651431b5968a4a84d928",
+      "bytes": 2442
+    },
+    {
+      "path": "frontend/src/api/logs.ts",
+      "sha256": "514a73dde767aaed998914d78ac281aa1bb7de2cbbfa68718d237ae3fba1c832",
+      "bytes": 1029
+    },
+    {
+      "path": "frontend/src/api/performance.ts",
+      "sha256": "ef8e75c76c3bfd3deef1b5fa633f13e7b185b6c0261e6e21d5cd7a7e68f8a06d",
+      "bytes": 399
+    },
+    {
+      "path": "frontend/src/api/settings.ts",
+      "sha256": "a4b93b006e350b14c05e7588a473004bf72e497e5fd6e690b5a66fe4394e2564",
+      "bytes": 2562
+    },
+    {
+      "path": "frontend/src/api/statistics.ts",
+      "sha256": "4c3a5598393b68deedf3e5839a4625b1da7312b97508cb64ffb3ed3d6ebd37bf",
+      "bytes": 512
+    },
+    {
+      "path": "frontend/src/api/users.ts",
+      "sha256": "19c2dbc50a065484914973157ff3e72377bb9e44e7b284ca65a9d69b9e04986c",
+      "bytes": 1799
+    },
+    {
+      "path": "frontend/src/components/AgriConsultationQueue.vue",
+      "sha256": "0baa001f9e9bea0311accc01e76440d0978e29d80c67c2a8165681c02bbc9254",
+      "bytes": 5859
+    },
+    {
+      "path": "frontend/src/components/AgriHistoryPanel.vue",
+      "sha256": "fda2cbd57c026bf3396f5ae0c4fccf1d700113a6c489b595ddf87bef9196dd97",
+      "bytes": 5953
+    },
+    {
+      "path": "frontend/src/components/AuthenticatedImage.vue",
+      "sha256": "4ef2965c32a733913365284e4dc9861298597a5671e98933cd4fc9659b43bbfb",
+      "bytes": 1658
+    },
+    {
+      "path": "frontend/src/components/ConsultationReviewEditor.vue",
+      "sha256": "57ea9bff814b9b87668b696be3722a6070364435a9c772525910880fd0167374",
+      "bytes": 16083
+    },
+    {
+      "path": "frontend/src/components/DiagnosisHistoryPanel.vue",
+      "sha256": "767c9f8a938c73c7bbde79d60a32b47b1857b012ad37547e4a70c5ec0fbbebac",
+      "bytes": 8526
+    },
+    {
+      "path": "frontend/src/components/FarmLocationForm.vue",
+      "sha256": "2a3b1683a51101de0b29a4209107ac16b17d10c18fb4f6a148cb669c572cbdf4",
+      "bytes": 8246
+    },
+    {
+      "path": "frontend/src/components/FieldCropHistory.vue",
+      "sha256": "dc2ad4a671d7da59fa749001739924b006d045752a43a6fcac16533fb958ff10",
+      "bytes": 12232
+    },
+    {
+      "path": "frontend/src/components/FieldEnvironmentPanel.vue",
+      "sha256": "892c3c1624f8b3c0684530f76315cefc51975ba9a68c41befa071e457013fbf8",
+      "bytes": 15419
+    },
+    {
+      "path": "frontend/src/components/FieldWeatherPanel.vue",
+      "sha256": "2eb916fef06fd38772cb3589f2d2075ebe0d4633f5e447c91523ff4d270259c5",
+      "bytes": 21987
+    },
+    {
+      "path": "frontend/src/components/PageHeader.vue",
+      "sha256": "382a42a96af760c0d7c784f0a57bcdc8ac68c385d08268f74b452bb2d8190326",
+      "bytes": 1545
+    },
+    {
+      "path": "frontend/src/components/layout/MainLayout.vue",
+      "sha256": "bbcc8d55d99d06fa75570fa8d8ab79c4421ec2c46827a85bdd350cde7465ae87",
+      "bytes": 12043
+    },
+    {
+      "path": "frontend/src/components/layout/index.ts",
+      "sha256": "2f948eba3cef58c40d3a20310f200cc03ea8261209f7605d7ea2c28967db0a4f",
+      "bytes": 58
+    },
+    {
+      "path": "frontend/src/main.ts",
+      "sha256": "d808da93cdcd782e3853f612d401360935a019f75d7f62bc762fd68e3e54c727",
+      "bytes": 901
+    },
+    {
+      "path": "frontend/src/router/index.ts",
+      "sha256": "39487b505b56c9360a2c597c566554926ddbaea571c362372c16170185df3d8b",
+      "bytes": 6857
+    },
+    {
+      "path": "frontend/src/stores/auth.ts",
+      "sha256": "18f98e28da3f352ab7edf5985890de19639b7aea08b76f5623cd987503718d5b",
+      "bytes": 4302
+    },
+    {
+      "path": "frontend/src/stores/farmSelection.ts",
+      "sha256": "8972568a9cfc1f5ba1c0ae2232f6c160d3d3445b0978281e17036efa433866de",
+      "bytes": 2442
+    },
+    {
+      "path": "frontend/src/stores/settings.ts",
+      "sha256": "49810fe57137fa76192891931cffd0d133bf8a39e71974ade33a7cfa202f0a85",
+      "bytes": 1916
+    },
+    {
+      "path": "frontend/src/styles/markdown.css",
+      "sha256": "b23df23c72faeb2e8002b8fdfafb8551c73ce9822196273b26c0cb1c709327dc",
+      "bytes": 1336
+    },
+    {
+      "path": "frontend/src/styles/tokens.css",
+      "sha256": "aba4178138b46c5f771baf999efa5abc0f901703142928b756e04bfbd7abe11c",
+      "bytes": 8163
+    },
+    {
+      "path": "frontend/src/types/agriHistory.ts",
+      "sha256": "fcfd3dc2ad59dabf1757743b9af01ec51b0c85374c8555b6841611d1efbfa49a",
+      "bytes": 2490
+    },
+    {
+      "path": "frontend/src/types/agriStatistics.ts",
+      "sha256": "dfe6d6d80ff2113ab9f21e0afca6ae5006ba551ee0cb99829a156a2d41f93ce2",
+      "bytes": 1346
+    },
+    {
+      "path": "frontend/src/types/agriculture.ts",
+      "sha256": "75b2dcf2c8f84304c1e65f8efe2ecfc41de10b78657dd30b174ffae8d524bd1d",
+      "bytes": 10500
+    },
+    {
+      "path": "frontend/src/types/index.ts",
+      "sha256": "cdea2b997b61786e8529e94cef15f5c19aee0b822fc6c03d26afc4861935c8d9",
+      "bytes": 6515
+    },
+    {
+      "path": "frontend/src/utils/authRefresh.ts",
+      "sha256": "c3073cde3100113379806a9d2a3a5ba4667f3e60a4a880d77a0837ea2f890426",
+      "bytes": 7232
+    },
+    {
+      "path": "frontend/src/utils/businessDate.ts",
+      "sha256": "12cb4672258fde2645d5f8becdebc1009a6b4cfb9618fa65bbdf0bdb68292b5b",
+      "bytes": 351
+    },
+    {
+      "path": "frontend/src/utils/farmingDraft.ts",
+      "sha256": "05fe5914af5a1c52605bf6218bb351d0945d7113790e575b878fbfd70740be96",
+      "bytes": 1321
+    },
+    {
+      "path": "frontend/src/utils/guestIdentity.ts",
+      "sha256": "8852d661974e468f5aa5ec9d19be580bb62c03342aa09d72b50527261b39cd4c",
+      "bytes": 1862
+    },
+    {
+      "path": "frontend/src/utils/phone.ts",
+      "sha256": "5803207b4a76c6aee89d1bc094fc4548a3919e38eeae6085972b7cfff60f0b2a",
+      "bytes": 622
+    },
+    {
+      "path": "frontend/src/utils/planConfirmation.ts",
+      "sha256": "017a3a9442fbc5731774afd50902884cbf3e2516356da8833c199da7b0bbc6ed",
+      "bytes": 3408
+    },
+    {
+      "path": "frontend/src/utils/request.ts",
+      "sha256": "7fe2d4bba615da3a2a34ed5ecbbad05d99d3ff8fc3b592a5e9a83ca3888bd7aa",
+      "bytes": 7939
+    },
+    {
+      "path": "frontend/src/utils/requestId.ts",
+      "sha256": "bcc15a7028edfc04bcad89a97e2b6c521a7a103aac2fac46eadb8d1f93c3bd83",
+      "bytes": 525
+    },
+    {
+      "path": "frontend/src/utils/safeMarkdown.ts",
+      "sha256": "241daf3219e8fe97300564bde5b846cdf9d7cbd086aabfa7c1691cc2547a5196",
+      "bytes": 1034
+    },
+    {
+      "path": "frontend/src/utils/scopedDraft.ts",
+      "sha256": "d4e92df18cb5e6e9aa5f1fb1aa5deef47c84036878555511d6986979027fab5d",
+      "bytes": 1274
+    },
+    {
+      "path": "frontend/src/utils/validationMessage.ts",
+      "sha256": "204b505fe52970b6a9728ea85c9c34eb10e43c916ca1be145de9d8113f6e25fb",
+      "bytes": 1565
+    },
+    {
+      "path": "frontend/src/views/AgriChat.vue",
+      "sha256": "852e806799c93286b1f80ab9b03af35a81a03cdfddf7d86488a3ddf700afd04f",
+      "bytes": 65012
+    },
+    {
+      "path": "frontend/src/views/AgriDiagnosis.vue",
+      "sha256": "dc37508cfbff929e18933953396bc8b0ae140d29acf8cdf585bcdcb851819a52",
+      "bytes": 51333
+    },
+    {
+      "path": "frontend/src/views/AgriFarms.vue",
+      "sha256": "2a12acceb71491c6671d0b02fcef5801f9a7d3db498b7d85ad2320b5572f69a9",
+      "bytes": 48178
+    },
+    {
+      "path": "frontend/src/views/Dashboard.vue",
+      "sha256": "80928433e285098ce7739151dcc356311ba2a4f024eb047afb93ea93c484ad98",
+      "bytes": 36097
+    },
+    {
+      "path": "frontend/src/views/FarmingCalendar.vue",
+      "sha256": "92078c31f894387667143f3c8467fbba222d2928670f97c3742e5ec9fc2398f0",
+      "bytes": 30720
+    },
+    {
+      "path": "frontend/src/views/Knowledge.vue",
+      "sha256": "c3f80696daf31ac53968ac9fc96c2020cb92a2f4c0ab6565bbb5327cce210c9a",
+      "bytes": 48568
+    },
+    {
+      "path": "frontend/src/views/Login.vue",
+      "sha256": "6bad5c9ab545290b61fdb2c6c03c0a4c3c07c5666e048a99ac48010870c6ab6e",
+      "bytes": 11762
+    },
+    {
+      "path": "frontend/src/views/Logs.vue",
+      "sha256": "8c0900fcd264a417a1b42eda46b472f55398f23cd7fac0519370b842992b924d",
+      "bytes": 13098
+    },
+    {
+      "path": "frontend/src/views/Performance.vue",
+      "sha256": "92116e1b9eaef9c6e2874d18f783ba88e3aafd3109a3e2e84527cd07e2352047",
+      "bytes": 22651
+    },
+    {
+      "path": "frontend/src/views/RetiredFeature.vue",
+      "sha256": "f21a8e77987a5170114fc0a206d10c848b470dfaa88bb6a73ff596be0e6eab6f",
+      "bytes": 500
+    },
+    {
+      "path": "frontend/src/views/Settings.vue",
+      "sha256": "097305bb5a2760a16eacebfad7557c0afa12c851bb6fbaa4b64e055ae9ab0c39",
+      "bytes": 50981
+    },
+    {
+      "path": "frontend/src/views/Statistics.vue",
+      "sha256": "88d6323bfe88c3f69119054e402064fcda7ae4b0bc156feb62f5a066c8f11b88",
+      "bytes": 11589
+    },
+    {
+      "path": "frontend/src/views/Users.vue",
+      "sha256": "4a921ef0297fce2647f75007c8cce06e06367f51271275d8e91128e39ee61a55",
+      "bytes": 24446
+    },
+    {
+      "path": "frontend/src/vite-env.d.ts",
+      "sha256": "b5015e6573deb5719501ce671b0475d318ac4f41d27c9dd1ad4e68a4769260a0",
+      "bytes": 193
+    },
+    {
+      "path": "frontend/tests/agri-optimization-a.test.mjs",
+      "sha256": "8129eaee2c74344f2c005f231655605df93023b747da1a38277232926ea7aab8",
+      "bytes": 9104
+    },
+    {
+      "path": "frontend/tests/analysis-lifecycle.test.mjs",
+      "sha256": "4e9511dc75616465c8a4c2012f50653d4d938a9efa61989f1417a6f26c7eb2c2",
+      "bytes": 6929
+    },
+    {
+      "path": "frontend/tests/archive-browser.test.mjs",
+      "sha256": "9e2abd87edbb5b28508455210667bba70d2375f91470bd25e8c664fd32fc6347",
+      "bytes": 5570
+    },
+    {
+      "path": "frontend/tests/audit-remediation.test.mjs",
+      "sha256": "671b99565e2fa049eba83e21c10d05371a79a40992c72a3607eb3ef3b01666f6",
+      "bytes": 3542
+    },
+    {
+      "path": "frontend/tests/auth-recovery.test.mjs",
+      "sha256": "dc015c35f934f47391e2422b7bde673d69115ca42d33fe4ceba9c50717bd36d0",
+      "bytes": 11050
+    },
+    {
+      "path": "frontend/tests/consultation-review.test.mjs",
+      "sha256": "b080f42acf9df962ce962b96733812ec99ea2b3bb519c495fd58cb08ad8d7f3f",
+      "bytes": 8562
+    },
+    {
+      "path": "frontend/tests/diagnosis-behavior.test.mjs",
+      "sha256": "14520c0ae660e8e72c6a17c8c0cafc93967547365dec5151a26f412d1967a630",
+      "bytes": 16147
+    },
+    {
+      "path": "frontend/tests/diagnosis-history-behavior.test.mjs",
+      "sha256": "58c9d772915353cec24aaa3251b5e8d99a1be5d7be70e7616c216ab641937a88",
+      "bytes": 8784
+    },
+    {
+      "path": "frontend/tests/farm-selection.test.mjs",
+      "sha256": "0aee7934cd82baf990badc46ffc508f9391b2d476238a2fe3b65d8d73f02b42a",
+      "bytes": 9707
+    },
+    {
+      "path": "frontend/tests/field-environment.test.mjs",
+      "sha256": "a0041a4278ec36ef0a345c5b43b5b3c82e5d766cbced85f52b20a0ffae504961",
+      "bytes": 3951
+    },
+    {
+      "path": "frontend/tests/issue2-behavior.test.mjs",
+      "sha256": "e958e5d097fbc91ee2dec633067972af9b70210d40d976c3054b6e90a3c442b5",
+      "bytes": 12006
+    },
+    {
+      "path": "frontend/tests/knowledge-transfer.test.mjs",
+      "sha256": "57e7148d6ac557a045f8293ae791df2fe082dd8552cb72063c347ad7e469f807",
+      "bytes": 7274
+    },
+    {
+      "path": "frontend/tests/log-query-behavior.test.mjs",
+      "sha256": "7baa7f234e142d9c137858bc3737b1322d8164878f43e4928a26c64bddfaea85",
+      "bytes": 4878
+    },
+    {
+      "path": "frontend/tests/markdown-behavior.test.mjs",
+      "sha256": "7496195f75b33bdb81982a89383aec9231b7e6c306384bd69b59e44679747234",
+      "bytes": 5939
+    },
+    {
+      "path": "frontend/tests/model-settings-behavior.test.mjs",
+      "sha256": "569bb79ec2bdd335c60cd2056d3baeec7b8383ee129905b5aa65b02c239d94e1",
+      "bytes": 14847
+    },
+    {
+      "path": "frontend/tests/observability-behavior.test.mjs",
+      "sha256": "3ed0c94ed9e3ddd179ef60d12b041557fa716eabbd786f420d24f54acbf920dc",
+      "bytes": 9322
+    },
+    {
+      "path": "frontend/tests/private-image-behavior.test.mjs",
+      "sha256": "e7ae59c8b1297dfb0bf50d0ea77f7d7de49f33b6f38905aa6d7312566138c8b6",
+      "bytes": 4372
+    },
+    {
+      "path": "frontend/tests/rag-settings-behavior.test.mjs",
+      "sha256": "5f3d82a7f590f051cc9cab46124b8ae2c4c3e07b484e7cdf82e569d717ccac14",
+      "bytes": 3753
+    },
+    {
+      "path": "frontend/tests/registration-and-plan.test.mjs",
+      "sha256": "53aae9f3a6db8ba474798fa78742d5d569f44b1fb29e2176f4e6446f5687292a",
+      "bytes": 23004
+    },
+    {
+      "path": "frontend/tests/weather-lifecycle.test.mjs",
+      "sha256": "dad95b2f822d680d0cec51dba9a0fd84df19fd428cea727845627b76ff821598",
+      "bytes": 3389
+    },
+    {
+      "path": "frontend/tools/build_agri_frontend.mjs",
+      "sha256": "1361eb5a226e5c454ad82d600d2f0ce7b47157b8e45bbff218cffc41532a615d",
+      "bytes": 808
+    },
+    {
+      "path": "frontend/tsconfig.json",
+      "sha256": "d56d27b12ce1d4545777566bc14ed9bcaafaeaecded813ba9755a281b829909d",
+      "bytes": 761
+    },
+    {
+      "path": "frontend/tsconfig.node.json",
+      "sha256": "c29ce4d199229ef1e278614f5add11895f271107c7cb867e23af9829b16e079f",
+      "bytes": 384
+    },
+    {
+      "path": "frontend/vite.config.ts",
+      "sha256": "088a999128d6d564603409eaa11b52ad0778a379c0abcfb927a4ab4b32e4ec04",
+      "bytes": 859
+    },
+    {
+      "path": "image/农业智能决策.jpg",
+      "sha256": "cc3684abf610093335d5f280ceeb66020117af3630874b6653308285f34a60ec",
+      "bytes": 305632
+    },
+    {
+      "path": "image/农事作业日历.jpg",
+      "sha256": "e4c33a539dc685d1a1ccaa465333f9e39219202bb600bc303a9ed93b6f9246d8",
+      "bytes": 246858
+    },
+    {
+      "path": "image/农场决策大盘.jpg",
+      "sha256": "92a9e7e2df77765dbe0a5a6eb510a409cbdbd1a7c10d1eecb93fccf1aa94a98b",
+      "bytes": 297459
+    },
+    {
+      "path": "image/农场田块管理.jpg",
+      "sha256": "4fad98d7329e76dafcd21d5e3edf6cd9e657b11dfe1dade5ce6126a13c9eea0a",
+      "bytes": 190950
+    },
+    {
+      "path": "image/性能监控.jpg",
+      "sha256": "e11807caab7591b0bea4b1ff4de854e5da81de8c5c4176b4a0d3d77312977f35",
+      "bytes": 230993
+    },
+    {
+      "path": "image/数据统计.jpg",
+      "sha256": "482abd8960ca35458e058f135abd8b5eac7e63192a55254a21e312d29be880a6",
+      "bytes": 205565
+    },
+    {
+      "path": "image/日志管理.jpg",
+      "sha256": "21c87c297e83e0dc9536889e26618c8a6e8f2518936dfceb6ec92bdcc4ac477f",
+      "bytes": 279695
+    },
+    {
+      "path": "image/用户管理.jpg",
+      "sha256": "e80efcfe949bb7faf76bb2b8309e541584dfedf3f7d4bc42ed25b0417c1984a3",
+      "bytes": 177728
+    },
+    {
+      "path": "image/病害诊断与会诊（专家端）.jpg",
+      "sha256": "1b8aac1bc343dd56fbec2c484e5293b078eaa65f3e44e18a7d3a0ad190383226",
+      "bytes": 296519
+    },
+    {
+      "path": "image/病害诊断与会诊（农户端）.jpg",
+      "sha256": "65fa0195a0bfc044c647afb265c68506db04a2ca14a5561f585bf35bbeeef025",
+      "bytes": 189815
+    },
+    {
+      "path": "image/知识库管理.jpg",
+      "sha256": "5d57ff86be4934e34530efcfce121d04cd167353427e8f29af50799272be2ef9",
+      "bytes": 247721
+    },
+    {
+      "path": "image/系统设置.jpg",
+      "sha256": "b91e6d5a959d3aa6c1b57d96e8fec75292606c8bd5877238eab3e605fabe36c7",
+      "bytes": 213873
+    },
+    {
+      "path": "pytest.ini",
+      "sha256": "87df58805262d3311c9fcf54483a7fcf2822bc93b9eecf638f0f560dfae2c33f",
+      "bytes": 355
+    }
+  ]
+}

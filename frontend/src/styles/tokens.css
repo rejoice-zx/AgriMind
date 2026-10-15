@@ -1,0 +1,256 @@
+/* ============================================================
+ * AgriMind Design Tokens（对标 art-design-pro 设计语言）
+ * 全站唯一设计令牌来源：颜色 / 圆角 / 阴影 / 间距 / 字号
+ * 亮色定义于 :root，暗色定义于 html.dark，页面禁止硬编码 hex
+ * ============================================================ */
+
+:root {
+  /* ---------- 品牌主色（Element Plus 覆写，emerald 统一绿） ---------- */
+  --el-color-primary: #059669;
+  --el-color-primary-light-3: #34d399;
+  --el-color-primary-light-5: #6ee7b7;
+  --el-color-primary-light-7: #a7f3d0;
+  --el-color-primary-light-8: #d1fae5;
+  --el-color-primary-light-9: #ecfdf5;
+  --el-color-primary-dark-2: #047857;
+
+  /* ---------- 语义化颜色令牌 ---------- */
+  --app-bg: #f6f7fb;              /* 页面底色 */
+  --app-surface: #ffffff;         /* 卡片 / 侧栏 / 顶栏表面 */
+  --app-surface-2: #f8fafc;       /* 次级表面（表头、嵌套区、弱填充） */
+  --app-border: #e8ebf0;          /* 常规边框 */
+  --app-border-light: #f1f5f9;    /* 弱边框（分隔线） */
+  --app-text: #0f172a;            /* 主文字 */
+  --app-text-secondary: #64748b;  /* 次要文字 */
+  --app-text-placeholder: #94a3b8;
+  --app-hover: #f1f5f9;           /* 悬浮填充 */
+  --app-topbar-bg: rgba(255, 255, 255, 0.85); /* 毛玻璃顶栏 */
+
+  /* ---------- 圆角（与 Element 变量对齐） ---------- */
+  --app-radius-sm: 6px;
+  --app-radius-md: 8px;
+  --app-radius-lg: 10px;
+  --app-radius-xl: 12px;
+  --app-radius-round: 20px;
+  --el-border-radius-base: var(--app-radius-md);
+  --el-border-radius-small: var(--app-radius-sm);
+  --el-border-radius-round: var(--app-radius-round);
+
+  /* ---------- 阴影（三档，克制） ---------- */
+  --app-shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.04);
+  --app-shadow-md: 0 2px 8px rgba(15, 23, 42, 0.06);
+  --app-shadow-lg: 0 8px 24px rgba(15, 23, 42, 0.08);
+
+  /* ---------- 间距阶梯 ---------- */
+  --app-space-1: 4px;
+  --app-space-2: 8px;
+  --app-space-3: 12px;
+  --app-space-4: 16px;
+  --app-space-5: 20px;
+  --app-space-6: 24px;
+  --app-space-7: 32px;
+
+  /* ---------- 字号阶梯 ---------- */
+  --app-text-xs: 12px;
+  --app-text-sm: 13px;
+  --app-text-base: 14px;
+  --app-text-lg: 16px;
+  --app-text-xl: 18px;
+  --app-text-2xl: 20px;
+  --app-text-3xl: 24px;
+
+  /* ---------- 动效 ---------- */
+  --app-transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* ---------- 旧变量别名（兼容存量 var() 引用，自动跟随暗色） ---------- */
+  --bg-color: var(--app-bg);
+  --sidebar-bg: var(--app-surface);
+  --topbar-bg: var(--app-surface);
+  --border-color: var(--app-border-light);
+  --text-color: var(--app-text);
+  --text-secondary: var(--app-text-secondary);
+  --hover-bg: var(--app-hover);
+
+  /* ---------- Element 组件级令牌覆写（双主题通用） ---------- */
+  --el-card-border-radius: var(--app-radius-lg);
+  --el-card-border-color: var(--app-border);
+  --el-card-padding: var(--app-space-5);
+}
+
+/* ---------- 暗色主题令牌 ---------- */
+html.dark {
+  /* 品牌主色暗色阶（element-plus dark/css-vars.css 会用 html.dark 覆写主色，
+     必须在此处同优先级夺回，否则暗色下按钮变回默认蓝） */
+  --el-color-primary: #059669;
+  --el-color-primary-light-3: #047857;
+  --el-color-primary-light-5: #065f46;
+  --el-color-primary-light-7: #064e3b;
+  --el-color-primary-light-8: #04402f;
+  --el-color-primary-light-9: #022c22;
+  --el-color-primary-dark-2: #34d399;
+
+  --app-bg: #141414;
+  --app-surface: #1d1e1f;
+  --app-surface-2: #262727;
+  --app-border: #363637;
+  --app-border-light: #2d2d2d;
+  --app-text: #e5eaf3;
+  --app-text-secondary: #a3a6ad;
+  --app-text-placeholder: #8d9095;
+  --app-hover: #262727;
+  --app-topbar-bg: rgba(29, 30, 31, 0.85);
+
+  --app-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --app-shadow-md: 0 2px 8px rgba(0, 0, 0, 0.35);
+  --app-shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.4);
+
+  /* Element 暗色覆写（原 App.vue 收口至此） */
+  --el-bg-color: #1d1e1f;
+  --el-bg-color-page: #141414;
+  --el-bg-color-overlay: #1d1e1f;
+  --el-text-color-primary: #e5eaf3;
+  --el-text-color-regular: #cfd3dc;
+  --el-text-color-secondary: #a3a6ad;
+  --el-text-color-placeholder: #8d9095;
+  --el-border-color: #414243;
+  --el-border-color-light: #363637;
+  --el-border-color-lighter: #2d2d2d;
+  --el-fill-color: #262727;
+  --el-fill-color-light: #1d1e1f;
+  --el-fill-color-lighter: #262727;
+  --el-fill-color-blank: #1d1e1f;
+}
+
+/* ============================================================
+ * 全局基础样式
+ * ============================================================ */
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue',
+    Arial, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+  color: var(--app-text);
+  background-color: var(--app-bg);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+#app {
+  width: 100%;
+  min-height: 100vh;
+}
+
+/* 细腻滚动条（art-design-pro 规范） */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.35);
+  border-radius: 4px;
+  transition: background 0.2s;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(100, 116, 139, 0.6);
+}
+
+/* ============================================================
+ * Element Plus 全局组件配方（令牌驱动，双主题自动适配）
+ * ============================================================ */
+
+.el-card {
+  border: 1px solid var(--app-border-light);
+  box-shadow: var(--app-shadow-sm);
+}
+
+.el-table {
+  --el-table-border-color: var(--app-border-light);
+  --el-table-header-bg-color: var(--app-surface-2);
+  --el-table-row-hover-bg-color: var(--app-hover);
+  --el-table-bg-color: var(--app-surface);
+  --el-table-tr-bg-color: var(--app-surface);
+  --el-table-header-text-color: var(--app-text-secondary);
+}
+
+.el-pagination {
+  --el-pagination-bg-color: var(--app-surface);
+  --el-pagination-button-bg-color: var(--app-surface);
+  --el-pagination-hover-color: var(--el-color-primary);
+}
+
+html.dark .el-drawer {
+  background-color: var(--app-surface);
+}
+
+html.dark .el-input__wrapper,
+html.dark .el-select__wrapper {
+  background-color: var(--app-bg);
+}
+
+/* ============================================================
+ * 共享布局类（页面骨架配方）
+ * ============================================================ */
+
+/* 标准页面容器 */
+.app-page {
+  padding: var(--app-space-5) var(--app-space-6);
+}
+
+/* 统一卡片（替代自制 div 卡） */
+.app-card {
+  background: var(--app-surface);
+  border: 1px solid var(--app-border-light);
+  border-radius: var(--app-radius-lg);
+  box-shadow: var(--app-shadow-sm);
+  transition: box-shadow 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.app-card--hover:hover {
+  box-shadow: var(--app-shadow-md);
+}
+
+/* ============================================================
+ * 移动端适配（≤767px）：触控目标加固（最小 32px）
+ * ============================================================ */
+@media (max-width: 767px) {
+  .el-button--small {
+    min-height: 32px;
+    padding: 6px var(--app-space-3);
+    font-size: var(--app-text-sm);
+  }
+
+  /* 圆形 / 图标按钮 */
+  .el-button.is-circle,
+  .el-button.is-circle.el-button--small {
+    min-width: 32px;
+    min-height: 32px;
+  }
+
+  /* 文字 / 链接按钮（表格操作列等） */
+  .el-button.is-link,
+  .el-button.is-text {
+    min-height: 32px;
+    min-width: 32px;
+  }
+
+  /* 步进器：整体 ≥32px 高，避免 controls-right 下 ±按钮单独 min-height 溢出容器错位 */
+  .el-input-number {
+    min-height: 32px;
+  }
+  .el-input-number .el-input__wrapper,
+  .el-input-number .el-input__inner {
+    min-height: 32px;
+  }
+}

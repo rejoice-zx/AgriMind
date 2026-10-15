@@ -1,0 +1,36 @@
+{
+  "name": "agrimind-frontend",
+  "private": true,
+  "version": "0.0.1",
+  "type": "module",
+  "engines": {
+    "node": "^20.19.0 || >=22.12.0"
+  },
+  "scripts": {
+    "dev": "vite",
+    "test": "node --test",
+    "test:ci": "node --test --test-reporter=tap",
+    "build": "vue-tsc -b && vite build",
+    "build:isolated": "vue-tsc --noEmit -p tsconfig.json && node tools/build_agri_frontend.mjs",
+    "preview": "vite preview",
+    "typecheck": "vue-tsc --noEmit -p tsconfig.json",
+    "lint": "npm run typecheck"
+  },
+  "dependencies": {
+    "@element-plus/icons-vue": "^2.3.1",
+    "axios": "^1.13.5",
+    "echarts": "^6.0.0",
+    "element-plus": "^2.6.1",
+    "markdown-it": "15.0.2",
+    "pinia": "^2.1.7",
+    "vue": "^3.4.21",
+    "vue-router": "^4.3.0"
+  },
+  "devDependencies": {
+    "@types/node": "^25.2.0",
+    "@vitejs/plugin-vue": "^6.0.4",
+    "typescript": "^5.9.3",
+    "vite": "^7.3.1",
+    "vue-tsc": "^3.2.4"
+  }
+}
