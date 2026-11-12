@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch, onBeforeUnmount } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { newRequestId } from '@/utils/requestId'
 import { useAuthStore } from '@/stores/auth'
 import { getAgriConsultation, getConsultationContext, resolveAgriConsultation } from '@/api/agriHistory'
 import { draftOwnerKey, readScopedDraft, saveScopedDraft } from '@/utils/scopedDraft'
@@ -86,7 +87,8 @@ function buildSubmission(): ConsultationSubmission {
       evidence_references: form.value.evidence.trim(), review_notes: form.value.notes.trim(), checks: { ...form.value.checks },
       products: approved ? JSON.parse(JSON.stringify(form.value.products)) : [] }
   }
-  return { answer: form.value.answer.trim(), request_id: crypto.randomUUID(), operation_review: review }
+  // newRequestId 在非安全上下文（http 局域网地址）下也可用；crypto.randomUUID 只在 https/localhost 存在。
+  return { answer: form.value.answer.trim(), request_id: newRequestId(), operation_review: review }
 }
 function receiptSaved(ticket: AgriConsultation) {
   // Only a receipt with the original number proves that our ambiguous submission completed.
@@ -100,7 +102,19 @@ function receiptSaved(ticket: AgriConsultation) {
 }
 async function submit() {
   if (!writable.value || busy.value || pending.value) return
-  try { pending.value = buildSubmission() } catch (error: any) { ElMessage.warning(error.message); return }
+  let submission: ConsultationSubmission
+  try { submission = buildSubmission() } catch (error: any) { ElMessage.warning(error.message); return }
+  // 签署回执提交后不可修改，签署前列明影响并要求确认
+  const approved = submission.operation_review?.outcome === 'approved'
+  try {
+    await ElMessageBox.confirm(approved
+      ? '将以你的账号签署"核验通过"回执。回执提交后不可修改或撤回，只代表依据已录入资料完成核对，不代表现场检测或安全保证。'
+      : '将以你的账号提交本次答复。提交后不可修改，如需更正请另发咨询。',
+      approved ? '确认签署核验通过' : '确认提交答复',
+      { type: 'warning', confirmButtonText: approved ? '确认签署' : '确认提交', cancelButtonText: '再检查一下' })
+  } catch { return }
+  if (!writable.value || busy.value || pending.value) return
+  pending.value = submission
   persist()
   await retryOriginal()
 }

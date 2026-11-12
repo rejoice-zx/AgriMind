@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { Script, createContext } from 'node:vm'
+import { sharedModule } from './shared-modules.mjs'
 const require = createRequire(new URL('../package.json', import.meta.url))
 const { parse, compileScript } = require('@vue/compiler-sfc')
 const ts = require('typescript'), vue = require('vue')
@@ -13,6 +14,7 @@ function setup(file, props = {}, api = {}, onEmit = () => {}, dependencies = {})
   const module = { exports: {} }, disposers = []
   new Script(compiled).runInContext(createContext({ module, exports: module.exports, console, URL: dependencies.URL, require: name => {
     if (name in dependencies) return dependencies[name]
+    const shared = sharedModule(name); if (shared) return shared
     if (name === 'pinia') return { storeToRefs: vue.toRefs }
     if (name === '@/stores/farmSelection') return { useFarmSelectionStore: () => vue.reactive({ farms: [], selectedFarmId: null }) }
     if (name === '@/stores/auth') return { useAuthStore: () => ({ user: { id: 1, role: 'customer' } }) }

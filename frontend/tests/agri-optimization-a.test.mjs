@@ -3,20 +3,22 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { Script, createContext } from 'node:vm'
+import { sharedModule } from './shared-modules.mjs'
 const require = createRequire(new URL('../package.json', import.meta.url))
 const { parse, compileScript } = require('@vue/compiler-sfc')
 const ts = require('typescript')
 const vue = require('vue')
-function execute(source, dependencies) {
+function execute(source, dependencies, globals = {}) {
   const module = { exports: {} }
   const javascript = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText
-  new Script(javascript).runInContext(createContext({ module, exports: module.exports, console, require: name => {
+  new Script(javascript).runInContext(createContext({ module, exports: module.exports, console, ...globals, require: name => {
     if (name in dependencies) return dependencies[name]
+    const shared = sharedModule(name); if (shared) return shared
     throw new Error(`Unexpected dependency ${name}`)
   } }))
   return module.exports
 }
-function chat(overrides = {}, historyOverrides = {}) {
+function chat(overrides = {}, historyOverrides = {}, globals = {}) {
   const source = readFileSync(new URL('../src/views/AgriChat.vue', import.meta.url), 'utf8')
   const { descriptor } = parse(source)
   const requests = []
@@ -41,7 +43,7 @@ function chat(overrides = {}, historyOverrides = {}) {
     '@/stores/auth': { useAuthStore: () => ({ user: { id: 1 } }) },
     '@/utils/scopedDraft': { draftOwnerKey: user => user ? String(user.id) : undefined, saveScopedDraft: () => false, readScopedDraft: () => null },
     '@/utils/safeMarkdown': { renderSafeMarkdown: value => value }
-  })
+  }, globals)
   return { state: exports.default.setup({}, { expose() {} }), requests, warnings }
 }
 test('out of order history responses cannot replace the current conversation', async () => {
@@ -163,4 +165,59 @@ test('actual route table retires all four pages and gives cs an agricultural lan
     assert.equal(routes.find(route => route.path === path).redirect, '/retired')
     assert.equal(result.getMenuItems('admin').some(item => item.path === path), false)
   }
+})
+test('Enter during IME composition never sends a half-typed question; Shift+Enter is a newline', async () => {
+  const { state, requests } = chat()
+  state.inputQuery.value = '番茄叶片发黄'
+  let prevented = 0
+  const key = extra => ({ isComposing: false, keyCode: 13, shiftKey: false, preventDefault() { prevented++ }, ...extra })
+  state.onComposerEnter(key({ isComposing: true }))
+  state.onComposerEnter(key({ keyCode: 229 }))
+  state.onComposerEnter(key({ shiftKey: true }))
+  await new Promise(resolve => setTimeout(resolve, 0))
+  assert.equal(requests.length, 0)
+  assert.equal(prevented, 0)
+})
+test('chat sidebars only reset when a breakpoint is crossed, keeping the user choice on resize', () => {
+  const window = { innerWidth: 1150 }
+  const { state } = chat({}, {}, { window })
+  state.checkResponsive()
+  assert.equal(state.isCompact.value, true)
+  assert.equal(state.leftSidebarOpen.value, false) // compact drawers start closed: no mask over the conversation
+  state.leftSidebarOpen.value = true                // the user opens the drawer
+  window.innerWidth = 1160                          // e.g. address bar / keyboard resize inside the same band
+  state.checkResponsive()
+  assert.equal(state.leftSidebarOpen.value, true)
+  window.innerWidth = 1500                          // crossing into the wide band applies the wide default
+  state.checkResponsive()
+  assert.equal(state.isCompact.value, false)
+  assert.equal(state.rightSidebarOpen.value, true)
+})
+test('a suggested prompt fills the input on a plain click, and only a real drag suppresses the click', () => {
+  const { state } = chat()
+  const captured = []
+  const el = { scrollLeft: 0, setPointerCapture: id => captured.push(id) }
+  state.promptChipsRef.value = el
+  // 单击：按下后没有移动，不应捕获指针，也不应拦截 click
+  state.onChipsPointerDown({ pointerType: 'mouse', button: 0, clientX: 100, pointerId: 1 })
+  state.onChipsPointerMove({ clientX: 102, pointerId: 1 })
+  state.onChipsPointerUp()
+  let stopped = false
+  state.onChipsClickCapture({ stopPropagation() { stopped = true }, preventDefault() {} })
+  assert.equal(stopped, false); assert.equal(captured.length, 0)
+  state.applyPrompt('番茄叶片发黄怎么办')
+  assert.equal(state.inputQuery.value, '番茄叶片发黄怎么办')
+  // 拖动：超过阈值后才捕获指针，并拦截随后的 click
+  state.onChipsPointerDown({ pointerType: 'mouse', button: 0, clientX: 100, pointerId: 2 })
+  state.onChipsPointerMove({ clientX: 60, pointerId: 2 })
+  state.onChipsPointerUp()
+  state.onChipsClickCapture({ stopPropagation() { stopped = true }, preventDefault() {} })
+  assert.equal(stopped, true); assert.deepEqual(captured, [2]); assert.equal(el.scrollLeft, 40)
+})
+test('emoji is inserted at the caret', () => {
+  const { state } = chat()
+  state.inputQuery.value = '叶片发黄'
+  state.inputRef.value = { textarea: { selectionStart: 2, selectionEnd: 2, value: '叶片发黄', focus() {}, setSelectionRange() {} } }
+  state.insertEmoji('🌱')
+  assert.equal(state.inputQuery.value, '叶片🌱发黄')
 })

@@ -5,6 +5,7 @@ import { test } from 'node:test'
 import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { Script, createContext } from 'node:vm'
+import { sharedModule } from './shared-modules.mjs'
 
 const require = createRequire(new URL('../package.json', import.meta.url))
 const { parse, compileScript } = require('@vue/compiler-sfc')
@@ -37,7 +38,8 @@ function harness(overrides = {}, role = 'customer') {
     if (name === 'vue') return { ...vue, onMounted: () => {}, onBeforeUnmount: () => {} }
     if (name === 'pinia') return { storeToRefs: vue.toRefs }
     if (name === '@/stores/farmSelection') return { useFarmSelectionStore: () => vue.reactive({ farms: [], selectedFarmId: null }) }
-    if (name === 'element-plus') return { ElMessage, ElMessageBox: {} }
+    if (name === 'element-plus') return { ElMessage, ElMessageBox: { confirm: async () => true } }
+    const shared = sharedModule(name); if (shared) return shared
     if (name === '@element-plus/icons-vue') return {}
     if (name === '@/api/agriculture') return api
     if (name === '@/stores/auth') return { useAuthStore: () => ({ user: { id: 1, role } }) }
@@ -61,8 +63,9 @@ test('unselected field sends no association and never claims a null ticket was c
   assert.equal(state.diagResult.value.ticket_id, null)
   assert.equal(state.diagResult.value.disease_record_id, null)
   assert.equal(state.diagLoading.value, false)
-  assert.ok(messages.some(message => message.text.includes('本次未创建专家工单')))
-  assert.ok(!messages.some(message => message.text.includes('自动转接')))
+  // No ticket was created, so no message may claim a transfer to an expert.
+  assert.ok(messages.some(message => message.level === 'success' && message.text.includes('初诊分析已保存')))
+  assert.ok(!messages.some(message => message.text.includes('转交农技专家') || message.text.includes('工单 #')))
 })
 
 test('selected field is passed and a real ticket produces the created-ticket message', async () => {
@@ -77,8 +80,8 @@ test('selected field is passed and a real ticket produces the created-ticket mes
   await state.startVisualDiagnosis()
   assert.equal(requests[0].field_id, 29)
   assert.equal(state.diagResult.value.ticket_id, 73)
-  assert.ok(messages.some(message => message.text.includes('自动转接')))
-  assert.ok(!messages.some(message => message.text.includes('本次未创建')))
+  assert.ok(messages.some(message => message.text.includes('已转交农技专家（工单 #73）')))
+  assert.equal(messages.filter(message => message.level === 'warning').length, 0) // one clear message, not two stacked toasts
 })
 
 test('no image makes no diagnosis request', async () => {
@@ -323,4 +326,28 @@ test('admin deletion clears the matching diagnosis and refreshes the expert queu
   assert.equal(state.selectedTicketId.value, null)
   assert.equal(state.ticketDetail.value, null)
   assert.equal(refreshes, 1)
+})
+
+test('an expert lands on the consultation workbench; farmers and admins land on diagnosis', () => {
+  assert.equal(harness({}, 'expert').state.activeTab.value, 'expert')
+  assert.equal(harness({}, 'customer').state.activeTab.value, 'farmer')
+  assert.equal(harness({}, 'admin').state.activeTab.value, 'farmer')
+})
+
+test('changing the ticket filter returns to the first page', async () => {
+  const pages = []
+  const { state } = harness({ getExpertTickets: async params => { pages.push(params.page); return { data: { items: [], total: 0 } } } }, 'expert')
+  state.ticketPage.value = 3
+  state.ticketFilterStatus.value = 'in_review'
+  state.changeTicketFilter()
+  await new Promise(resolve => setTimeout(resolve, 0))
+  assert.equal(state.ticketPage.value, 1)
+  assert.equal(pages.at(-1), 1)
+})
+
+test('ticket status wording never overstates an AI or expert result', () => {
+  const { state } = harness({}, 'expert')
+  const labels = ['preliminary', 'pending_review', 'in_review', 'expert_reviewed'].map(s => state.formatTicketStatus(s).label).join('|')
+  assert.ok(!/确诊出方|确诊/.test(labels))
+  assert.equal(state.formatTicketStatus('expert_reviewed').label, '专家已复核')
 })

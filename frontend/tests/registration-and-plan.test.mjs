@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { Script, createContext } from 'node:vm'
+import { sharedModule } from './shared-modules.mjs'
 
 const require = createRequire(new URL('../package.json', import.meta.url))
 const ts = require('typescript'), vue = require('vue')
@@ -13,6 +14,7 @@ function execute(source, dependencies, globals = {}) {
   new Script(code).runInContext(createContext({ module, exports: module.exports, console, ...globals,
     require: name => {
       if (name in dependencies) return dependencies[name]
+      const shared = sharedModule(name); if (shared) return shared
       if (name.startsWith('@/components/')) return {}
       throw Error(name)
     }
@@ -423,4 +425,88 @@ test('historical crop records remain read only and keep the explicit batch filte
   env.state.newRecordForm.value.operation_content = 'should not submit from history'
   await env.state.submitNewRecord()
   assert.equal(writes, 0); assert.equal(env.state.recordHistoryOnly.value, true)
+})
+
+test('bulk confirmation lists the items first; cancelling writes nothing and the operator is the signed-in user', async () => {
+  const sent = []
+  let declined = true
+  const env = view('Dashboard', {
+    applyAgriPlan: async body => { sent.push(body); return { data: { record_ids: [30], message: '已保存' } } },
+    getFarmingRecords: async () => ({ data: [] })
+  }, {}, { confirm: async () => { if (declined) throw 'cancel'; return true } })
+  env.state.selectedFieldId.value = 1
+  env.state.currentPlan.value = { field_id: 1, items: [{ ...item }] }
+  await env.state.handleApplyAllTasks()
+  assert.equal(sent.length, 0)
+  declined = false
+  await env.state.handleApplyAllTasks()
+  assert.equal(sent.length, 1)
+  assert.notEqual(sent[0].operator, '农场管理员')
+})
+
+test('password rule matches the backend: at least 6 characters and at most 72 UTF-8 bytes', async () => {
+  const { sharedModule } = await import('./shared-modules.mjs')
+  const pw = sharedModule('@/utils/password')
+  assert.equal(pw.passwordProblem('12345'), '密码至少 6 个字符')
+  assert.equal(pw.passwordProblem('a'.repeat(72)), '')
+  assert.ok(pw.passwordProblem('农'.repeat(25)).includes('72 字节'))
+  assert.equal(pw.passwordProblem('农'.repeat(24)), '')
+})
+
+test('login lands on the role home page and ignores external redirects', async () => {
+  const env = view('Login', {})
+  assert.equal(env.state.safeRedirect('//evil.example'), null)
+  assert.equal(env.state.safeRedirect('https://evil.example'), null)
+  assert.equal(env.state.safeRedirect('/login?x=1'), null)
+  assert.equal(env.state.safeRedirect('/farms'), '/farms')
+})
+
+test('a 409 registration conflict shows the backend explanation', async () => {
+  const env = view('Login', { registerCustomer: async () => { throw { response: { status: 409, data: { detail: '用户名已存在' } } } } })
+  env.state.registerForm.phone = '13800000001'
+  env.state.registerFormRef.value = phoneForm(env.state, 'registerFormRef')
+  await env.state.handleRegister()
+  assert.deepEqual(env.messages.at(-1), { level: 'error', value: '用户名已存在' })
+})
+
+test('admin cannot disable or delete their own account and the user list is paged by the server', async () => {
+  const calls = []
+  const admin = view('Users', {}, {
+    getUsers: async params => { calls.push(params); return { data: { items: [], total: 0 } } },
+    getRegistrations: async () => ({ data: { items: [], total: 0 } })
+  })
+  const self = { id: 1, role: 'admin', is_active: true, registration_status: 'approved' }
+  assert.equal(admin.state.canToggleActive(self), false)
+  assert.equal(admin.state.canDeleteUser(self), false)
+  assert.equal(admin.state.canToggleActive({ id: 5, role: 'customer', is_active: true, registration_status: 'approved' }), true)
+  await admin.state.loadUserList()
+  assert.equal(calls[0].page_size, 20)
+  admin.state.selectRole('expert')
+  assert.equal(calls.at(-1).role, 'expert'); assert.equal(calls.at(-1).page, 1)
+  assert.equal(admin.state.registrationFilter.value, 'pending')
+})
+
+test('changing a role asks for confirmation and a declined change sends nothing', async () => {
+  const sent = []
+  const admin = view('Users', {}, { updateUser: async (id, body) => { sent.push(body); return { data: {} } },
+    getUsers: async () => ({ data: { items: [], total: 0 } }) }, { confirm: async () => { throw 'cancel' } })
+  admin.state.openEditDialog({ id: 9, username: 'farmer-x', role: 'customer', phone: '13800000001', is_active: true })
+  admin.state.form.role = 'admin'
+  admin.state.formRef.value = phoneForm(admin.state, 'formRef')
+  await admin.state.handleSubmit()
+  assert.equal(sent.length, 0)
+  assert.equal(admin.state.submittingUser.value, false)
+})
+
+test('pressing Enter twice while logging in sends only one login request', async () => {
+  let calls = 0
+  const env = view('Login', {})
+  // 替换 store：login 计数并延迟返回
+  env.state.loginFormRef.value = { validate: async () => true }
+  const store = env.state.authStore
+  if (store) store.login = async () => { calls++; await new Promise(r => setTimeout(r, 10)); return false }
+  const enter = { key: 'Enter', preventDefault() {} }
+  env.state.handleKeyPress(enter); env.state.handleKeyPress(enter)
+  await new Promise(r => setTimeout(r, 30))
+  assert.equal(calls, 1)
 })

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { Script, createContext } from 'node:vm'
+import { sharedModule } from './shared-modules.mjs'
 
 const require = createRequire(new URL('../package.json', import.meta.url))
 const vue = require('vue'), pinia = require('pinia'), ts = require('typescript')
@@ -15,6 +16,7 @@ function execute(source, dependencies, globals = {}) {
   new Script(code).runInContext(createContext({ module, exports: module.exports, console, ...globals,
     require: name => {
       if (name in dependencies) return dependencies[name]
+      const shared = sharedModule(name); if (shared) return shared
       if (name.startsWith('@/components/') || name.startsWith('@/utils/') || name === '@/api/agriHistory') return {}
       throw Error(name)
     } }))

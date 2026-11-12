@@ -3,6 +3,7 @@ import { test } from 'node:test'
 import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { Script, createContext } from 'node:vm'
+import { sharedModule, routerStub } from './shared-modules.mjs'
 const require = createRequire(new URL('../package.json', import.meta.url))
 const { parse, compileScript } = require('@vue/compiler-sfc')
 const ts = require('typescript')
@@ -21,6 +22,8 @@ function setup(view, overrides = {}) {
     if (name === 'element-plus') return { ElMessage: Object.fromEntries(['success', 'error', 'warning'].map(level => [level, text => messages.push({ level, text })])), ElMessageBox: {} }
     if (name === '@element-plus/icons-vue' || name === '@/api/knowledge') return {}
     if (name === '@/api/settings') return api
+    if (name === 'vue-router') return routerStub
+    const shared = sharedModule(name); if (shared) return shared
     throw Error(name)
   } }))
   return { state: module.exports.default.setup({}, { expose() {} }), calls, messages }
@@ -36,7 +39,7 @@ test('saved zero threshold and disabled rewriting survive page load and save', a
   assert.equal(calls[0].rag.similarity_threshold, 0)
   assert.equal(calls[0].rag.use_rewrite, false)
   assert.equal(calls[0].rag.max_context_length, 1500)
-  assert.equal(state.saving.value, false)
+  assert.equal(state.savingSection.rag, false)
 })
 
 test('knowledge page only submits chunk fields and makes rebuild requirement explicit', async () => {
@@ -52,8 +55,9 @@ test('knowledge page only submits chunk fields and makes rebuild requirement exp
 
 test('failed retrieval settings save does not present a success', async () => {
   const { state, messages } = setup('Settings', { updateSettings: async () => { throw Error('controlled rejection') } })
+  await state.loadSettings()
   await state.saveRAGSettings()
-  assert.equal(state.saving.value, false)
+  assert.equal(state.savingSection.rag, false)
   assert.ok(messages.some(message => message.level === 'error'))
   assert.ok(!messages.some(message => message.level === 'success'))
 })

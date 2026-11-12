@@ -2,8 +2,7 @@
 import { ref, onMounted, onBeforeUnmount, computed, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useFarmSelectionStore } from '@/stores/farmSelection'
-import { useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   OfficeBuilding,
   Sunny,
@@ -11,10 +10,17 @@ import {
   Warning,
   Refresh,
   Histogram,
-  Compass,
   CircleCheck,
-  CloseBold
+  CloseBold,
+  Clock,
+  Bell,
+  InfoFilled,
+  Document
 } from '@element-plus/icons-vue'
+import { useAuthStore } from '@/stores/auth'
+import { recordKind } from '@/constants/agri'
+import { errorText } from '@/utils/errorText'
+import SourceBadge from '@/components/common/SourceBadge.vue'
 
 import {
   getFieldsByFarm,
@@ -35,7 +41,8 @@ import PageHeader from '@/components/PageHeader.vue'
 import { businessDate } from '@/utils/businessDate'
 import { planConfirmationReason, planExecutionLabel, markPlanItemsCompleted, planProofNeedsRenewal, renewedPlanItems, planUpdateLabel } from '@/utils/planConfirmation'
 
-const router = useRouter()
+const auth = useAuthStore()
+const planError = ref('')
 
 // ==================== 状态管理 ====================
 const loading = ref(false)
@@ -79,18 +86,27 @@ const currentField = computed(() => {
   return fields.value.find(f => f.id === selectedFieldId.value) || null
 })
 
-// 气象阻断任务数统计
+// 今日之后、需核实或暂缓的提醒数（施药复核、天气风险等）
 const blockedTasksCount = computed(() => {
   if (!currentPlan.value?.items) return 0
   return currentPlan.value.items.filter(item => !item.can_proceed).length
 })
 
-// 今日任务
+// 今日任务：首屏只突出今天；之后几天收进折叠区
 const todayTasks = computed(() => {
   if (!currentPlan.value?.items) return []
   const todayStr = businessDate()
   return currentPlan.value.items.filter(item => item.date === todayStr)
 })
+const upcomingTasks = computed(() => {
+  if (!currentPlan.value?.items) return []
+  const todayStr = businessDate()
+  return currentPlan.value.items.filter(item => item.date > todayStr)
+})
+const showUpcoming = ref(false)
+// 最近一次现场观测/预报之外的"待办"：近期施药记录缺安全间隔期
+const sprayMissingPhi = computed(() => recentRecords.value.filter(rec => recordKind(rec.record_type).key === 'spraying' && rec.safety_interval_days == null).length)
+const currentOperator = computed(() => auth.user?.display_name || auth.user?.username || '')
 
 const confirmableTodayTasks = computed(() => todayTasks.value.filter(item => !planConfirmationReason(item)))
 
@@ -104,8 +120,8 @@ async function initDashboard() {
     if (!alive) return
     farmContextReady = true
     await handleFarmChange(selectedFarmId.value)
-  } catch (err: any) {
-    ElMessage.error('加载农场列表失败: ' + (err.response?.data?.detail || err.message))
+  } catch (err: unknown) {
+    ElMessage.error(errorText(err, '加载农场列表失败'))
   } finally {
     loading.value = false
   }
@@ -133,7 +149,7 @@ async function handleFarmChange(farmId: number | null) {
     }
   } catch (err: any) {
     if (version !== farmRequestVersion) return
-    ElMessage.error('加载地块失败: ' + (err.response?.data?.detail || err.message))
+    ElMessage.error(errorText(err, '加载田块失败'))
   }
 }
 
@@ -179,11 +195,13 @@ async function fetchAgriPlan(fieldId: number, version = fieldRequestVersion, for
     })
     if (selectedFieldId.value === fieldId && version === fieldRequestVersion && planVersion === planRequestVersion) {
       currentPlan.value = planRes.data
+      planError.value = ''
       lastPlanCheck = Date.now()
     }
-  } catch (err: any) {
+  } catch (err: unknown) {
     if (version !== fieldRequestVersion || planVersion !== planRequestVersion) return
-    ElMessage.warning('推演农事计划提示: ' + (err.response?.data?.detail || '暂无可用计划'))
+    planError.value = errorText(err, '检查提醒暂时无法更新')
+    if (forceRefresh || !currentPlan.value) ElMessage.warning(planError.value)
   } finally {
     if (version === fieldRequestVersion && planVersion === planRequestVersion) planLoading.value = false
   }
@@ -226,7 +244,7 @@ async function handleApplySingleTask(item: PlanItem) {
     const res = await applyAgriPlan({
       field_id: fieldId,
       items: [item],
-      operator: '农场管理员'
+      operator: currentOperator.value
     })
     markPlanItemsCompleted(currentPlan.value, fieldId, [item], res.data.record_ids || [])
     ElMessage.success(res.data.message || '计划项已成功落库为农事执行记录')
@@ -235,8 +253,8 @@ async function handleApplySingleTask(item: PlanItem) {
       const recRes = await getFarmingRecords(fieldId)
       if (selectedFieldId.value === fieldId) recentRecords.value = (recRes.data || []).slice(0, 8)
     } catch { ElMessage.warning('事项已确认，履历刷新失败，请刷新页面查看') }
-  } catch (err: any) {
-    ElMessage.error('执行落库失败: ' + (err.response?.data?.detail || err.message))
+  } catch (err: unknown) {
+    ElMessage.error(errorText(err, '确认失败，请刷新后重试'))
   } finally {
     applyingPlan.value = false
   }
@@ -250,13 +268,20 @@ async function handleApplyAllTasks() {
     ElMessage.warning('今日没有可确认的事项，请查看各项核实或复核原因')
     return
   }
+  // 批量确认会写入多条"已完成"记录，先列出将要写入的事项
+  try {
+    await ElMessageBox.confirm(`将把以下 ${validItems.length} 项记为今日已完成（只记录"已检查"，不代表施肥或灌溉）：\n` +
+      validItems.map(i => `· ${i.action}`).join('\n'), '确认今日已完成事项',
+      { type: 'info', confirmButtonText: `确认 ${validItems.length} 项`, cancelButtonText: '取消' })
+  } catch { return }
+  if (applyingPlan.value || selectedFieldId.value !== fieldId) return
   try {
     applyingPlan.value = true
     if (validItems.some(planProofNeedsRenewal)) validItems = await renewConfirmation(validItems, fieldId)
     const res = await applyAgriPlan({
       field_id: fieldId,
       items: validItems,
-      operator: '农场管理员'
+      operator: currentOperator.value
     })
     markPlanItemsCompleted(currentPlan.value, fieldId, validItems, res.data.record_ids || [])
     ElMessage.success(res.data.message)
@@ -264,23 +289,16 @@ async function handleApplyAllTasks() {
       const recRes = await getFarmingRecords(fieldId)
       if (selectedFieldId.value === fieldId) recentRecords.value = (recRes.data || []).slice(0, 8)
     } catch { ElMessage.warning('事项已确认，履历刷新失败，请刷新页面查看') }
-  } catch (err: any) {
-    ElMessage.error('批量落库失败: ' + (err.response?.data?.detail || err.message))
+  } catch (err: unknown) {
+    ElMessage.error(errorText(err, '批量确认失败，请刷新后重试'))
   } finally {
     applyingPlan.value = false
   }
 }
 
 function getRecordTypeLabel(type: string) {
-  const map: Record<string, { label: string; tag: string }> = {
-    irrigation: { label: '水肥灌溉', tag: 'primary' },
-    fertilization: { label: '科学追肥', tag: 'warning' },
-    pest_control: { label: '植保用药', tag: 'danger' },
-    field_management: { label: '整枝农事', tag: 'success' },
-    weeding: { label: '除草除杂', tag: 'info' },
-    harvesting: { label: '采收上市', tag: 'success' }
-  }
-  return map[type] || { label: type, tag: 'info' }
+  const kind = recordKind(type)
+  return { label: kind.label, tag: kind.tag }
 }
 
 onMounted(() => {
@@ -299,15 +317,17 @@ onBeforeUnmount(() => {
   <div class="app-page dashboard-page" v-loading="loading">
     <!-- 统一页面头 -->
     <PageHeader
-      title="工作台"
-      description="AgriMind 田块多维时空档案、真实微气象预警与未来 7 天智能排程决策中枢"
+      title="农场工作台"
+      description="当前田块的档案、室外天气参考、今日检查提醒与最近农事记录。"
     >
       <template #actions>
         <el-select
           v-model="selectedFarmId"
-          placeholder="选择示范农场"
-          style="width: 220px"
+          placeholder="选择农场"
+          class="ctx-select"
+          aria-label="选择农场"
         >
+          <template #prefix><span class="ctx-prefix">农场</span></template>
           <el-option
             v-for="f in farms"
             :key="f.id"
@@ -318,10 +338,12 @@ onBeforeUnmount(() => {
 
         <el-select
           v-model="selectedFieldId"
-          placeholder="选择大棚/田块"
-          style="width: 180px"
+          placeholder="选择田块/大棚"
+          class="ctx-select ctx-select--narrow"
+          aria-label="选择田块"
           @change="handleFieldChange"
         >
+          <template #prefix><span class="ctx-prefix">田块</span></template>
           <el-option
             v-for="fd in fields"
             :key="fd.id"
@@ -330,7 +352,8 @@ onBeforeUnmount(() => {
           />
         </el-select>
 
-        <el-select v-if="activeCrops.length > 1" :model-value="activeCrop?.id" placeholder="请选择作物批次" :disabled="applyingPlan" style="width:220px" @change="selectPlanting">
+        <el-select v-if="activeCrops.length > 1" :model-value="activeCrop?.id" placeholder="请选择作物批次" :disabled="applyingPlan" class="ctx-select" aria-label="选择作物批次" @change="selectPlanting">
+          <template #prefix><span class="ctx-prefix">批次</span></template>
           <el-option v-for="crop in activeCrops" :key="crop.id" :value="crop.id" :label="`${crop.crop} · ${crop.planting_date} · #${crop.id}`" />
         </el-select>
 
@@ -342,7 +365,7 @@ onBeforeUnmount(() => {
           :disabled="!selectedFieldId || applyingPlan || cropLoading"
           @click="selectedFieldId && fetchAgriPlan(selectedFieldId, fieldRequestVersion, true)"
         >
-          刷新推演
+          刷新提醒
         </el-button>
       </template>
     </PageHeader>
@@ -356,11 +379,11 @@ onBeforeUnmount(() => {
             <el-icon><OfficeBuilding /></el-icon>
           </div>
           <div class="metric-text">
-            <span class="metric-label">基地田块档案</span>
-            <div class="metric-value">{{ currentFarm ? `${currentFarm.name} · ${currentField?.name || '主基地'}` : '未选择田块' }}</div>
+            <span class="metric-label">当前田块</span>
+            <div class="metric-value" :title="currentFarm && currentField ? `${currentFarm.name} · ${currentField.name}` : ''">{{ currentField ? currentField.name : currentFarm ? '该农场还没有田块' : '未选择农场' }}</div>
 
             <div class="metric-extra">
-              <span>面积 {{ currentField?.area || 0 }} 亩</span>
+              <span>面积 <span class="app-num">{{ currentField?.area ?? '未录入' }}</span> 亩</span>
               <span class="dot">·</span>
               <span>土壤: {{ currentField?.soil_type || '未录入' }}</span>
             </div>
@@ -375,16 +398,17 @@ onBeforeUnmount(() => {
             <el-icon><Histogram /></el-icon>
           </div>
           <div class="metric-text">
-            <span class="metric-label">在茬物候作物</span>
+            <span class="metric-label">在种作物</span>
             <div class="metric-value">
-              {{ activeCrop ? `${activeCrop.crop} · ${activeCrop.variety || '品种未登记'}` : activeCrops.length > 1 ? '请选择批次' : '休耕/待种' }}
+              {{ activeCrop ? `${activeCrop.crop} · ${activeCrop.variety || '品种未登记'}` : activeCrops.length > 1 ? '请选择批次' : '未登记在种作物' }}
             </div>
             <div class="metric-extra">
-              <el-tag size="small" type="success" effect="plain">
-                {{ activeCrop?.growth_stage || '阶段未录入' }}
+              <el-tag size="small" type="info" effect="plain">
+                {{ activeCrop?.growth_stage || '生育期未录入' }}
               </el-tag>
-              <span class="dot">·</span>
-              <span>状态: {{ activeCrop ? '在茬（不代表健康诊断）' : activeCrops.length > 1 ? '多个在种批次待选择' : '未录入活跃作物' }}</span>
+              <span v-if="activeCrop" class="dot">·</span>
+              <span v-if="activeCrop">定植 {{ activeCrop.planting_date }}</span>
+              <span v-else-if="activeCrops.length > 1">多个在种批次，请在上方选择</span>
             </div>
           </div>
         </div>
@@ -398,10 +422,7 @@ onBeforeUnmount(() => {
           </div>
           <div class="metric-text">
             <FieldWeatherPanel :field-id="selectedFieldId" :compact="true" />
-            <div v-if="blockedTasksCount" class="metric-extra metric-blocked">
-              <el-icon><Warning /></el-icon>
-              <span>{{ blockedTasksCount }} 项待核实或复核</span>
-            </div>
+
           </div>
         </div>
       </div>
@@ -413,14 +434,15 @@ onBeforeUnmount(() => {
             <el-icon><Calendar /></el-icon>
           </div>
           <div class="metric-text">
-            <span class="metric-label">农事检查建议</span>
-            <div class="metric-value">
-              {{ currentPlan?.total_tasks || 0 }} 项
+            <span class="metric-label">今日检查提醒</span>
+            <div class="metric-value app-num">
+              {{ todayTasks.length }} 项
             </div>
             <div class="metric-extra">
-              <span>今日需执行: {{ todayTasks.length }} 项</span>
+              <span v-if="blockedTasksCount" class="metric-blocked"><el-icon><Warning /></el-icon>{{ blockedTasksCount }} 项需核实或复核</span>
+              <span v-else>本周共 {{ currentPlan?.total_tasks || 0 }} 项</span>
               <span class="dot">·</span>
-              <router-link to="/calendar" class="link-calendar">进入日历 →</router-link>
+              <router-link to="/calendar" class="link-calendar">查看日历</router-link>
             </div>
           </div>
         </div>
@@ -437,10 +459,11 @@ onBeforeUnmount(() => {
               <div>
                 <span class="card-title">
                   <el-icon><Calendar /></el-icon>
-                  未来 7 天农事检查建议
+                  今日检查提醒
+                  <SourceBadge kind="ai" label="系统生成 · 非处方" />
                 </span>
                 <span class="card-desc">
-                  基于田块档案与室外天气的待确认清单，施药配方需专家核验
+                  按固定巡查清单生成，并标注天气风险；确认只记录"已检查"，施药须另行记录并经专家复核。
                 </span>
               </div>
               <div class="header-action-btns">
@@ -457,26 +480,18 @@ onBeforeUnmount(() => {
             </div>
           </template>
 
-          <div v-if="currentPlan?.summary" class="plan-summary-banner">
-            <el-icon><Compass /></el-icon>
-            <span>{{ currentPlan.summary }}</span>
-          </div>
-          <div v-if="currentPlan" class="plan-metadata">
-            <p>{{ planUpdateLabel(currentPlan) }}</p>
-            <p>{{ currentPlan.update_reason }} · 保留同日安排，检查建议不代替现场农艺判断。</p>
-            <details v-if="currentPlan.changes?.length">
-              <summary>本次更新说明</summary>
-              <p v-for="change in currentPlan.changes" :key="change">{{ change }}</p>
-            </details>
-          </div>
+          <el-alert v-if="planError" :title="planError" type="warning" :closable="false" show-icon class="plan-error">
+            <template #default>显示的是上次成功获取的提醒，可点击右上角"刷新提醒"重试。</template>
+          </el-alert>
 
           <!-- 计划任务时序列表 -->
           <div v-if="currentPlan?.items && currentPlan.items.length > 0" class="plan-timeline">
+            <p v-if="!todayTasks.length" class="app-note">今天没有检查提醒。</p>
             <div
-              v-for="(item, idx) in currentPlan.items"
-              :key="idx"
+              v-for="item in (showUpcoming ? [...todayTasks, ...upcomingTasks] : todayTasks)"
+              :key="`${item.date}-${item.record_type}-${item.action}`"
               class="plan-task-card"
-              :class="{ 'blocked-task': !item.can_proceed }"
+              :class="{ 'blocked-task': !item.can_proceed, 'upcoming-task': item.date !== todayTasks[0]?.date && !todayTasks.includes(item) }"
             >
               <div class="task-date-col">
                 <div class="date-badge">{{ item.date }}</div>
@@ -495,21 +510,22 @@ onBeforeUnmount(() => {
                     <span v-else-if="item.execution_status === 'revoked' || item.execution_status === 'unavailable'" class="badge-block">
                       <el-icon><CloseBold /></el-icon> {{ planExecutionLabel(item) }}
                     </span>
-                    <span v-else-if="item.can_proceed" class="badge-safe">
-                      <el-icon><CircleCheck /></el-icon> 待人工确认
+                    <span v-else-if="item.can_proceed" class="badge-pending">
+                      <el-icon><Clock /></el-icon> 待确认
                     </span>
                     <span v-else class="badge-block">
-                      <el-icon><CloseBold /></el-icon> 需核实 / 暂缓
+                      <el-icon><Warning /></el-icon> 需核实 / 暂缓
                     </span>
                   </div>
                 </div>
 
                 <p class="task-desc">{{ item.description }}</p>
 
-                <div class="task-meta-row">
-                  <span class="meta-tag"><strong>推演依据:</strong> {{ item.reason }}</span>
-                  <span class="meta-tag"><strong>标准规程:</strong> {{ item.source }}</span>
-                </div>
+                <details class="task-meta">
+                  <summary>依据说明</summary>
+                  <p>{{ item.reason }}</p>
+                  <p class="app-note">来源：{{ item.source }}</p>
+                </details>
 
                 <div v-if="item.risk_notes" class="task-risk-alert">
                   <el-icon><Warning /></el-icon>
@@ -530,55 +546,47 @@ onBeforeUnmount(() => {
                 <small v-if="planConfirmationReason(item)">{{ planConfirmationReason(item) }}</small>
               </div>
             </div>
+            <el-button v-if="upcomingTasks.length" text class="toggle-upcoming" @click="showUpcoming = !showUpcoming">
+              {{ showUpcoming ? '收起之后几天的提醒' : `查看之后几天的提醒（${upcomingTasks.length} 项）` }}
+            </el-button>
+            <div v-if="currentPlan" class="plan-metadata">
+              <p>{{ planUpdateLabel(currentPlan) }}；{{ currentPlan.update_reason }}</p>
+              <details v-if="currentPlan.changes?.length">
+                <summary>本次更新说明</summary>
+                <p v-for="change in currentPlan.changes" :key="change">{{ change }}</p>
+              </details>
+            </div>
           </div>
 
           <el-empty
             v-else
-            description="暂无可推演农事任务，请确认田块是否已录入种植作物批次"
-            :image-size="80"
-          />
+            :description="!currentField ? '请先选择田块' : activeCrops.length > 1 && !activeCrop ? '请先选择作物批次' : '该田块还没有在种作物，登记种植批次后才会生成检查提醒'"
+            :image-size="72"
+          >
+            <router-link v-if="currentField && !activeCrops.length" to="/farms"><el-button size="small">去登记种植批次</el-button></router-link>
+          </el-empty>
         </el-card>
       </div>
 
       <!-- 右侧：快捷工具 + 田间履历追溯 -->
       <div class="side-section">
-        <!-- 快捷入口卡片 -->
+        <!-- 待办提醒：只列出可从已有数据确认的事项，不编造风险评分 -->
         <el-card class="section-card" shadow="never">
           <template #header>
             <span class="card-title">
-              <el-icon><Lightning /></el-icon>
-              农业核心功能直达
+              <el-icon><Bell /></el-icon>
+              需要留意
             </span>
           </template>
-          <div class="quick-links-grid">
-            <div class="quick-btn-item" @click="router.push('/agri-chat')">
-              <div class="quick-btn-icon">
-                <el-icon><ChatDotRound /></el-icon>
-              </div>
-              <div class="quick-btn-title">农业决策智能体</div>
-              <div class="quick-btn-sub">多工具自主协同研判</div>
-            </div>
-            <div class="quick-btn-item" @click="router.push('/diagnosis')">
-              <div class="quick-btn-icon">
-                <el-icon><Camera /></el-icon>
-              </div>
-              <div class="quick-btn-title">病叶视觉初诊</div>
-              <div class="quick-btn-sub">多模态大模型+专家复核</div>
-            </div>
-            <div class="quick-btn-item" @click="router.push('/calendar')">
-              <div class="quick-btn-icon">
-                <el-icon><Calendar /></el-icon>
-              </div>
-              <div class="quick-btn-title">农事作业日历</div>
-              <div class="quick-btn-sub">月度时序全景看板</div>
-            </div>
-            <div class="quick-btn-item" @click="router.push('/farms')">
-              <div class="quick-btn-icon">
-                <el-icon><House /></el-icon>
-              </div>
-              <div class="quick-btn-title">农场与地块管理</div>
-              <div class="quick-btn-sub">物候种植档案建档</div>
-            </div>
+          <ul class="todo-list">
+            <li v-if="blockedTasksCount"><el-icon><Warning /></el-icon><span>{{ blockedTasksCount }} 项检查提醒需要核实或专家复核（如施药方案、天气风险）。</span></li>
+            <li v-if="sprayMissingPhi"><el-icon><Warning /></el-icon><span>最近 {{ sprayMissingPhi }} 条施药记录没有填写安全间隔期，采收前核查会把它们视为风险。</span></li>
+            <li v-if="activeCrop && activeCrop.growth_stage === '待核实'"><el-icon><InfoFilled /></el-icon><span>当前批次的生育期尚未核实，请到"农场与田块"更新。</span></li>
+            <li v-if="!blockedTasksCount && !sprayMissingPhi && !(activeCrop && activeCrop.growth_stage === '待核实')" class="todo-empty"><el-icon><CircleCheck /></el-icon><span>暂无需要处理的事项。</span></li>
+          </ul>
+          <div class="todo-actions">
+            <router-link to="/agri-chat"><el-button size="small">问资料分析</el-button></router-link>
+            <router-link to="/diagnosis"><el-button size="small">上传病叶初诊</el-button></router-link>
           </div>
         </el-card>
 
@@ -588,9 +596,9 @@ onBeforeUnmount(() => {
             <div class="card-header-flex">
               <span class="card-title">
                 <el-icon><Document /></el-icon>
-                田间真实农事执行履历
+                最近农事记录
               </span>
-              <router-link to="/farms" class="sub-link">更多记录 →</router-link>
+              <router-link to="/calendar" class="sub-link">在日历中查看</router-link>
             </div>
           </template>
 
@@ -606,13 +614,13 @@ onBeforeUnmount(() => {
                   <el-tag size="small" :type="getRecordTypeLabel(rec.record_type).tag">
                     {{ getRecordTypeLabel(rec.record_type).label }}
                   </el-tag>
-                  <span class="record-op">操作人: {{ rec.operator || '农户' }}</span>
+                  <span class="record-op">执行人：{{ rec.operator || '未填写' }}</span>
                 </div>
                 <div class="record-desc-text">
                   {{ rec.operation_content || rec.chemical_name || '农事作业完成' }}
                 </div>
-                <div v-if="rec.safety_interval_days" class="phi-warning-badge">
-                  安全间隔期(PHI): {{ rec.safety_interval_days }} 天
+                <div v-if="rec.safety_interval_days != null" class="phi-warning-badge">
+                  安全间隔期 {{ rec.safety_interval_days }} 天（录入值）
                 </div>
               </div>
             </div>
@@ -720,8 +728,10 @@ onBeforeUnmount(() => {
 }
 
 .metric-blocked {
-  margin-top: var(--app-space-1);
-  color: var(--el-color-danger);
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  color: var(--state-warning);
 }
 
 .dot {
@@ -896,9 +906,20 @@ onBeforeUnmount(() => {
   font-weight: 600;
 }
 
+.badge-pending {
+  color: var(--state-info);
+  background: var(--app-surface-2);
+  padding: 2px 10px;
+  border-radius: var(--app-radius-round);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 600;
+}
+
 .badge-block {
-  color: var(--el-color-danger);
-  background: var(--el-color-danger-light-9);
+  color: var(--state-warning);
+  background: var(--el-color-warning-light-9);
   padding: 2px 8px;
   border-radius: var(--app-radius-xl);
   display: inline-flex;
@@ -912,28 +933,6 @@ onBeforeUnmount(() => {
   color: var(--app-text-secondary);
   margin: 0 0 var(--app-space-2) 0;
   line-height: 1.5;
-}
-
-.task-meta-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--app-space-3);
-  font-size: var(--app-text-xs);
-  color: var(--app-text-secondary);
-  margin-bottom: 6px;
-}
-
-/* 推演依据 / 标准规程：纯文本弱信息，不用色块（在常规卡与告警卡上都不突兀） */
-.meta-tag {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 2px;
-}
-
-.meta-tag strong {
-  color: var(--app-text);
-  font-weight: 600;
-  flex-shrink: 0;
 }
 
 .task-risk-alert {
@@ -962,51 +961,97 @@ onBeforeUnmount(() => {
 }
 
 /* 右侧快捷链接 */
-.quick-links-grid {
+/* 需要留意：从已有数据推出的待办，不是风险评分 */
+.todo-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: var(--app-space-3);
+  gap: var(--app-space-2);
 }
 
-.quick-btn-item {
-  padding: var(--app-space-4);
-  background: var(--app-surface-2);
-  border: 1px solid var(--app-border-light);
-  border-radius: var(--app-radius-md);
-  cursor: pointer;
-  transition: var(--app-transition);
-  text-align: center;
-}
-
-.quick-btn-item:hover {
-  background: var(--el-color-primary-light-9);
-  border-color: var(--el-color-primary-light-7);
-  transform: translateY(-2px);
-}
-
-.quick-btn-icon {
-  width: 40px;
-  height: 40px;
-  margin: 0 auto var(--app-space-2);
-  border-radius: var(--app-radius-lg);
+.todo-list li {
   display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: var(--app-text-xl);
-  background: var(--el-color-primary-light-9);
-  color: var(--el-color-primary);
-}
-
-.quick-btn-title {
-  font-size: var(--app-text-base);
-  font-weight: 600;
+  gap: var(--app-space-2);
+  align-items: flex-start;
+  font-size: var(--app-text-sm);
+  line-height: 1.6;
   color: var(--app-text);
-  margin-bottom: 2px;
 }
 
-.quick-btn-sub {
+.todo-list li .el-icon {
+  flex-shrink: 0;
+  margin-top: 3px;
+  color: var(--state-warning);
+}
+
+.todo-list li.todo-empty {
+  color: var(--app-text-secondary);
+}
+
+.todo-list li.todo-empty .el-icon {
+  color: var(--state-success);
+}
+
+.todo-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--app-space-2);
+  margin-top: var(--app-space-4);
+}
+
+/* 上下文选择器：框内带"农场/田块/批次"前缀，未展开也能看出用途 */
+.ctx-select {
+  width: 260px;
+}
+
+.ctx-select--narrow {
+  width: 200px;
+}
+
+.ctx-prefix {
   font-size: var(--app-text-xs);
   color: var(--app-text-secondary);
+  padding-right: 6px;
+  margin-right: 2px;
+  border-right: 1px solid var(--app-border-light);
+  line-height: 1;
+}
+
+@media (max-width: 767px) {
+  .ctx-select,
+  .ctx-select--narrow {
+    width: 100%;
+  }
+}
+
+.plan-error {
+  margin-bottom: var(--app-space-3);
+}
+
+.toggle-upcoming {
+  align-self: flex-start;
+}
+
+.upcoming-task {
+  opacity: 0.85;
+}
+
+.task-meta {
+  font-size: var(--app-text-xs);
+  color: var(--app-text-secondary);
+  margin-bottom: var(--app-space-1);
+}
+
+.task-meta summary {
+  cursor: pointer;
+  min-height: 24px;
+}
+
+.task-meta p {
+  margin: var(--app-space-1) 0 0;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
 }
 
 /* 履历简列 */

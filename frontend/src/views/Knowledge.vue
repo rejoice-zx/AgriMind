@@ -2,7 +2,7 @@
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
-  Plus, Search, Upload, Download, Delete, Edit, Setting, Refresh, Folder, EditPen, Close
+  Plus, Search, Upload, Download, Delete, Edit, Setting, Refresh, Folder, Close
 } from '@element-plus/icons-vue'
 import type { FormInstance, FormRules } from 'element-plus'
 import {
@@ -13,6 +13,10 @@ import {
 import { getSettings, updateSettings } from '@/api/settings'
 import type { KnowledgeItem, IndexStatus } from '@/types'
 import type { KnowledgeImportResult } from '@/api/knowledge'
+import PageHeader from '@/components/PageHeader.vue'
+import { GROWTH_STAGE_OPTIONS } from '@/constants/agri'
+import { errorText, isDismissed } from '@/utils/errorText'
+const growthStageOptions = GROWTH_STAGE_OPTIONS.filter(option => option.value !== '待核实')
 
 const authorityOptions = [
   { value: '未核验', label: '未核验' }, { value: 'L1', label: 'L1 规范来源标注' },
@@ -27,6 +31,21 @@ const sourceOptions = [
 function sourceLabel(value: string | null | undefined) {
   return sourceOptions.find(option => option.value === value)?.label || value || '未填写'
 }
+
+// 检索状态：与后端 candidate_eligible 的条件一致（当前版本、来源未隔离/未核验、在有效期内）
+const today = new Date().toISOString().slice(0, 10)
+function retrievalState(item: KnowledgeItem): { label: string; tag: 'success' | 'info' | 'warning' | 'danger' } {
+  if (item.is_current !== 1) return { label: '非当前版本 · 不参与检索', tag: 'info' }
+  if (!item.source_type || item.source_type === 'unverified') return { label: '未核验 · 不参与检索', tag: 'warning' }
+  if (item.source_type === 'quarantined') return { label: '隔离 · 不参与检索', tag: 'warning' }
+  if (item.effective_to && item.effective_to < today) return { label: '已过期 · 不参与检索', tag: 'info' }
+  if (item.effective_from && item.effective_from > today) return { label: '未生效 · 不参与检索', tag: 'info' }
+  return { label: '可参与检索（来源待人工核对）', tag: 'success' }
+}
+// 分级只是录入标注：用五种可区分的样式，不用"成功/危险"语义色暗示可信度
+function authorityTag(level?: string | null): 'success' | 'primary' | 'warning' | 'info' {
+  return level === 'L1' ? 'success' : level === 'L2' ? 'primary' : level === 'L3' ? 'warning' : 'info'
+}
 function emptyKnowledgeForm() {
   return { question: '', answer: '', keywords: [] as string[], category: '通用', crop: '', region: '',
     growth_stage: '', topic: '', disease: '', source_type: 'unverified', authority_level: '未核验',
@@ -39,8 +58,6 @@ const categories = ref<string[]>([])
 const activeCategory = ref('全部')
 const newCatInput = ref('')
 const showCatInput = ref(false)
-const editingCat = ref<string | null>(null)
-const editingCatValue = ref('')
 
 async function loadCategories() {
   try {
@@ -60,21 +77,7 @@ function addCategory() {
   newCatInput.value = ''; showCatInput.value = false
 }
 
-function startEditCat(cat: string) { editingCat.value = cat; editingCatValue.value = cat }
-function confirmEditCat(oldCat: string) {
-  const v = editingCatValue.value.trim()
-  if (!v || v === oldCat) { editingCat.value = null; return }
-  if (categories.value.includes(v)) { ElMessage.warning('分类已存在'); editingCat.value = null; return }
-  const idx = categories.value.indexOf(oldCat)
-  if (idx !== -1) categories.value[idx] = v
-  if (activeCategory.value === oldCat) activeCategory.value = v
-  editingCat.value = null
-}
-
-function deleteCat(cat: string) {
-  categories.value = categories.value.filter(c => c !== cat)
-  if (activeCategory.value === cat) { activeCategory.value = '全部'; loadList() }
-}
+// 分类来自已有条目；后端没有分类改名/删除接口，因此页面不提供这两个操作（之前的本地修改刷新即恢复）。
 
 function selectCategory(cat: string) { activeCategory.value = cat; currentPage.value = 1; loadList() }
 
@@ -107,19 +110,28 @@ async function loadList() {
     if (revision !== listRevision) return
     list.value = res.data.items; total.value = res.data.total
     if (selected.value && !list.value.find(i => i.id === selected.value!.id)) selected.value = null
-  } catch (e: any) { if (revision === listRevision) ElMessage.error(e.response?.data?.detail || '加载失败') }
+  } catch (e: unknown) { if (revision === listRevision) ElMessage.error(errorText(e, '加载知识列表失败')) }
   finally { if (revision === listRevision) loading.value = false }
 }
 function handleSearch() { currentPage.value = 1; loadList() }
 
+const mutating = ref(false)
 async function handleDeleteAllInCategory() {
-  if (activeCategory.value === '全部') return
+  if (activeCategory.value === '全部' || mutating.value) return
+  const category = activeCategory.value
   try {
-    await ElMessageBox.confirm(`确定删除分类「${activeCategory.value}」下的所有知识条目？此操作不可恢复。`, '确认删除', { type: 'warning', confirmButtonText: '全部删除', cancelButtonText: '取消' })
-    const res = await deleteKnowledgeByCategory(activeCategory.value)
+    // 高风险批量删除：显示数量，并要求输入分类名称确认
+    await ElMessageBox.prompt(`将删除分类「${category}」下的全部 ${total.value} 条知识（含当前筛选外的条目），删除后不可恢复。请输入分类名称确认。`, '删除整个分类',
+      { type: 'warning', confirmButtonText: '确认删除', cancelButtonText: '取消',
+        inputValidator: value => value === category || '请输入完整的分类名称' })
+  } catch (e) { if (isDismissed(e)) return; throw e }
+  mutating.value = true
+  try {
+    const res = await deleteKnowledgeByCategory(category)
     ElMessage.success(`已删除 ${res.data.deleted_count} 条知识`)
-    selected.value = null; loadList(); loadIndexStatus(); loadCategories()
-  } catch (e: any) { if (e !== 'cancel') ElMessage.error(e.response?.data?.detail || '删除失败') }
+    selected.value = null; activeCategory.value = '全部'; loadList(); loadIndexStatus(); loadCategories()
+  } catch (e: unknown) { ElMessage.error(errorText(e, '删除失败')) }
+  finally { mutating.value = false }
 }
 function handlePageChange(p: number) { currentPage.value = p; loadList() }
 
@@ -146,12 +158,18 @@ function selectItem(item: KnowledgeItem) {
 
 async function handleDelete(item: KnowledgeItem, ev?: Event) {
   ev?.stopPropagation()
+  if (mutating.value) return
   try {
-    await ElMessageBox.confirm(`确定删除「${item.question.substring(0, 20)}…」？`, '确认', { type: 'warning' })
+    await ElMessageBox.confirm(`删除「${item.question.substring(0, 30)}${item.question.length > 30 ? '…' : ''}」？删除后不可恢复。`, '删除知识条目',
+      { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' })
+  } catch (e) { if (isDismissed(e)) return; throw e }
+  mutating.value = true
+  try {
     await deleteKnowledge(item.id); ElMessage.success('已删除')
     if (selected.value?.id === item.id) selected.value = null
     loadList(); loadIndexStatus(); loadCategories()
-  } catch (e: any) { if (e !== 'cancel') ElMessage.error(e.response?.data?.detail || '删除失败') }
+  } catch (e: unknown) { ElMessage.error(errorText(e, '删除失败')) }
+  finally { mutating.value = false }
 }
 
 // ── 添加 ──
@@ -170,12 +188,14 @@ function openAdd() {
 }
 function pushAddKw() { const v = addKw.value.trim(); if (v && !addForm.keywords.includes(v)) { addForm.keywords.push(v); addKw.value = '' } }
 async function submitAdd() {
-  if (!addRef.value) return
+  if (!addRef.value || mutating.value) return
   try { await addRef.value.validate() } catch { return }
+  mutating.value = true
   try {
     await createKnowledge(addForm)
-    ElMessage.success('添加成功'); addVisible.value = false; loadList(); loadIndexStatus(); loadCategories()
-  } catch (e: any) { ElMessage.error(e.response?.data?.detail || '添加失败') }
+    ElMessage.success('已添加'); addVisible.value = false; loadList(); loadIndexStatus(); loadCategories()
+  } catch (e: unknown) { ElMessage.error(errorText(e, '添加失败')) }
+  finally { mutating.value = false }
 }
 
 // ── 详情编辑 ──
@@ -184,8 +204,9 @@ const editMode = ref(false)
 const formKw = ref('')
 function pushFormKw() { const v = formKw.value.trim(); if (v && !form.keywords.includes(v)) { form.keywords.push(v); formKw.value = '' } }
 async function saveEdit() {
-  if (!selected.value) return
+  if (!selected.value || mutating.value) return
   const knowledgeId = selected.value.id
+  mutating.value = true
   try {
     const res = await updateKnowledge(knowledgeId, { ...form, keywords: [...form.keywords] })
     ElMessage.success('已保存')
@@ -193,7 +214,8 @@ async function saveEdit() {
     if (idx !== -1) list.value[idx] = res.data
     if (selected.value?.id === knowledgeId) selectItem(res.data)
     loadIndexStatus(); loadCategories()
-  } catch (e: any) { ElMessage.error(e.response?.data?.detail || '保存失败') }
+  } catch (e: unknown) { ElMessage.error(errorText(e, '保存失败')) }
+  finally { mutating.value = false }
 }
 function cancelEdit() { editMode.value = false; if (selected.value) selectItem(selected.value) }
 
@@ -201,11 +223,16 @@ function cancelEdit() { editMode.value = false; if (selected.value) selectItem(s
 const importVisible = ref(false); const importFile = ref<File | null>(null); const importLoading = ref(false)
 const importResult = ref<KnowledgeImportResult | null>(null)
 function onFileChange(f: any) { importFile.value = f.raw; importResult.value = null }
+// 只允许一个文件：再次选择时替换原文件，而不是静默忽略
+function onFileExceed(files: File[]) { importFile.value = files[0] || null; importResult.value = null }
+function resetImport() { importFile.value = null; importResult.value = null }
 async function doImport() {
   if (!importFile.value) { ElMessage.warning('请选择文件'); return }
   importLoading.value = true
   try {
-    const data = JSON.parse(await importFile.value.text())
+    let data
+    try { data = JSON.parse(await importFile.value.text()) }
+    catch { ElMessage.error('文件不是有效的 JSON，请检查括号、引号和逗号'); return }
     const items = Array.isArray(data) ? data : data?.items
     if (!Array.isArray(items)) { ElMessage.error('JSON须为条目数组或包含items数组的导出对象'); return }
     const res = await importKnowledge(items)
@@ -214,7 +241,7 @@ async function doImport() {
     if (res.data.errors.length) ElMessage.warning(message)
     else ElMessage.success(message)
     loadList(); loadIndexStatus(); loadCategories()
-  } catch (e: any) { ElMessage.error(e.response?.data?.detail || '导入失败') }
+  } catch (e: unknown) { ElMessage.error(errorText(e, '导入失败')) }
   finally { importLoading.value = false }
 }
 async function doExport() {
@@ -224,9 +251,11 @@ async function doExport() {
     if (!Array.isArray(data)) throw new Error('导出响应不包含条目数组')
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob)
-    a.download = `knowledge_${new Date().toISOString().split('T')[0]}.json`; a.click(); URL.revokeObjectURL(a.href)
+    a.download = `knowledge_${new Date().toISOString().split('T')[0]}.json`; a.click()
+    // 延迟回收，部分浏览器在 click 之后才开始读取对象 URL
+    const href = a.href; setTimeout(() => URL.revokeObjectURL(href), 1000)
     ElMessage.success('导出成功')
-  } catch (e: any) { ElMessage.error(e.response?.data?.detail || '导出失败') }
+  } catch (e: unknown) { ElMessage.error(errorText(e, '导出失败')) }
 }
 
 // ── RAG 配置 ──
@@ -339,6 +368,20 @@ onMounted(() => { loadCategories(); loadList(); loadIndexStatus(); loadRAGConfig
 </script>
 
 <template>
+  <div class="knowledge-page">
+  <PageHeader title="知识库管理" description="维护农业知识条目与来源信息。只有来源已标注、当前版本且在有效期内的条目才参与检索。" />
+  <!-- 索引状态：压成一行；只有需要重建时才用警示色，并就地给出重建按钮 -->
+  <div v-if="indexStatus" class="kb-summary" :class="{ 'is-stale': indexStatus.needs_rebuild }" role="status">
+    <el-tag size="small" :type="indexStatus.needs_rebuild ? 'warning' : 'info'" effect="plain">
+      向量索引 {{ indexStatus.count }} 条{{ indexStatus.needs_rebuild ? ' · 需要重建' : '' }}
+    </el-tag>
+    <span class="kb-summary-text">
+      {{ indexStatus.needs_rebuild
+        ? (indexStatus.rebuild_reason || '知识或模型配置已变化，重建前检索只用关键词方式。')
+        : '增删改条目后需重建索引，重建前按关键词检索。' }}
+    </span>
+    <el-button v-if="indexStatus.needs_rebuild" size="small" link type="primary" :icon="Refresh" :loading="rebuildLoading" @click="doRebuild">立即重建</el-button>
+  </div>
   <div class="three-col">
     <!-- ====== 左栏：分类 ====== -->
     <aside class="col col-left">
@@ -348,33 +391,21 @@ onMounted(() => { loadCategories(); loadList(); loadIndexStatus(); loadRAGConfig
           v-for="cat in categories" :key="cat"
           class="cat-item" :class="{ active: activeCategory === cat }"
         >
-          <!-- 编辑态 -->
-          <template v-if="editingCat === cat && cat !== '全部'">
-            <el-input v-model="editingCatValue" size="small" style="flex:1" @keyup.enter="confirmEditCat(cat)" />
-            <el-button :icon="Edit" link size="small" @click="confirmEditCat(cat)" />
-            <el-button :icon="Close" link size="small" @click="editingCat = null" />
-          </template>
-          <!-- 正常态 -->
-          <template v-else>
-            <div class="cat-label" @click="selectCategory(cat)">
-              <el-icon :size="15"><Folder /></el-icon>
-              <span>{{ cat }}</span>
-            </div>
-            <div v-if="cat !== '全部'" class="cat-ops">
-              <el-button :icon="EditPen" link size="small" @click.stop="startEditCat(cat)" />
-              <el-button :icon="Delete" link size="small" type="danger" @click.stop="deleteCat(cat)" />
-            </div>
-          </template>
+          <button type="button" class="cat-label" :aria-pressed="activeCategory === cat" @click="selectCategory(cat)">
+            <el-icon :size="15"><Folder /></el-icon>
+            <span>{{ cat }}</span>
+          </button>
         </div>
       </nav>
-      <!-- 添加分类 -->
+      <!-- 添加分类：新分类在保存第一条条目后才会出现在列表中 -->
       <div class="cat-add">
         <template v-if="showCatInput">
           <el-input v-model="newCatInput" size="small" placeholder="分类名称" @keyup.enter="addCategory" />
           <el-button size="small" type="primary" @click="addCategory">确定</el-button>
           <el-button size="small" @click="showCatInput = false">取消</el-button>
         </template>
-        <el-button v-else :icon="Plus" size="small" text style="width:100%" @click="showCatInput = true">添加分类</el-button>
+        <el-button v-else :icon="Plus" size="small" text style="width:100%" @click="showCatInput = true">新建分类</el-button>
+        <p class="app-note">新分类保存第一条知识后才会长期保留。</p>
       </div>
       <div class="col-footer">
         <el-button text :icon="Upload" size="small" @click="importVisible = true">导入</el-button>
@@ -388,44 +419,42 @@ onMounted(() => { loadCategories(); loadList(); loadIndexStatus(); loadRAGConfig
         <el-input v-model="keyword" placeholder="搜索问题或答案…" clearable style="flex:1" @keyup.enter="handleSearch" @clear="handleSearch">
           <template #prefix><el-icon><Search /></el-icon></template>
         </el-input>
-        <el-select v-model="selectedCrop" placeholder="作物筛选" style="width:105px" size="default" @change="handleSearch">
+        <el-select v-model="selectedCrop" placeholder="作物筛选" class="filter-crop" size="default" aria-label="作物筛选" @change="handleSearch">
           <el-option v-for="c in cropOptions" :key="c" :label="c" :value="c" />
         </el-select>
         <el-button type="primary" :icon="Plus" @click="openAdd">添加</el-button>
-        <el-button v-if="activeCategory !== '全部'" type="danger" :icon="Delete" @click="handleDeleteAllInCategory">删除全部</el-button>
       </div>
-      <div style="display:flex;flex-wrap:wrap;gap:8px;padding:10px">
-        <el-select v-model="selectedStage" clearable placeholder="生长期筛选" style="width:145px" @change="handleSearch">
-          <el-option v-for="stage in ['苗期','开花期','坐果期','开花坐果期','果实膨大期','采收期','全生育期']" :key="stage" :label="stage" :value="stage" />
+      <div class="filter-row">
+        <el-select v-model="selectedStage" clearable placeholder="生育期" class="filter-field" aria-label="生育期筛选" @change="handleSearch">
+          <el-option v-for="stage in growthStageOptions" :key="stage.value" :label="stage.label" :value="stage.value" />
         </el-select>
-        <el-input v-model="selectedRegion" clearable placeholder="省市区全称；支持省级简称" style="width:210px" @keyup.enter="handleSearch" @clear="handleSearch" />
-        <el-input v-model="selectedDisease" clearable placeholder="病害名称" style="width:150px" @keyup.enter="handleSearch" @clear="handleSearch" />
+        <el-input v-model="selectedRegion" clearable placeholder="地区（省市区）" class="filter-field" aria-label="地区筛选" @keyup.enter="handleSearch" @clear="handleSearch" />
+        <el-input v-model="selectedDisease" clearable placeholder="病害名称" class="filter-field" aria-label="病害筛选" @keyup.enter="handleSearch" @clear="handleSearch" />
         <el-button :icon="Search" @click="handleSearch">筛选</el-button>
-        <span>管理页包含待核验/隔离条目，检索还会检查日期与来源。</span>
+        <el-button v-if="activeCategory !== '全部'" type="danger" plain :icon="Delete" :disabled="mutating" @click="handleDeleteAllInCategory">删除整个分类</el-button>
       </div>
+      <p class="app-note list-note">列表包含未核验和隔离的条目；每条右上角显示它能否参与检索。</p>
       <div v-loading="loading" class="item-list">
         <div v-for="item in list" :key="item.id" class="item-card" :class="{ active: selected?.id === item.id }" @click="selectItem(item)">
           <div class="item-top">
-            <div style="display:flex;align-items:center;gap:6px">
-              <span class="item-id">{{ item.id }}</span>
+            <div class="item-tags">
               <el-tag size="small" effect="plain">{{ item.category }}</el-tag>
-              <el-tag size="small" :type="item.authority_level === 'L1' ? 'success' : (item.authority_level === 'L2' ? 'primary' : 'warning')" effect="dark">
-                {{ item.authority_level || '未核验' }}（标注）
-              </el-tag>
+              <el-tag v-if="item.crop" size="small" effect="plain">{{ item.crop }}</el-tag>
+              <el-tag size="small" :type="authorityTag(item.authority_level)" effect="plain">分级标注 {{ item.authority_level || '未核验' }}</el-tag>
             </div>
-            <el-tag v-if="item.crop" size="small" type="success" effect="light">🌱 {{ item.crop }}</el-tag>
+            <el-tag size="small" :type="retrievalState(item).tag" effect="light">{{ retrievalState(item).label }}</el-tag>
           </div>
           <p class="item-q">{{ item.question }}</p>
           <div v-if="item.growth_stage || item.disease" class="item-agri-meta">
-            <span v-if="item.growth_stage" class="agri-tag">阶段: {{ item.growth_stage }}</span>
-            <span v-if="item.disease" class="agri-tag">靶标: {{ item.disease }}</span>
+            <span v-if="item.growth_stage" class="agri-tag">生育期：{{ item.growth_stage }}</span>
+            <span v-if="item.disease" class="agri-tag">病害：{{ item.disease }}</span>
           </div>
           <div class="item-bottom">
             <div class="item-kws">
               <el-tag v-for="kw in (item.keywords||[]).slice(0,2)" :key="kw" size="small" type="info" round>{{ kw }}</el-tag>
               <span v-if="(item.keywords||[]).length > 2" class="more-kw">+{{ item.keywords.length - 2 }}</span>
             </div>
-            <el-button :icon="Delete" type="danger" text size="small" @click="handleDelete(item, $event)" />
+            <el-button :icon="Delete" type="danger" text size="small" :disabled="mutating" :aria-label="`删除 ${item.question}`" @click="handleDelete(item, $event)" />
           </div>
         </div>
         <el-empty v-if="!loading && list.length === 0" description="暂无数据" :image-size="64" />
@@ -454,8 +483,9 @@ onMounted(() => { loadCategories(); loadList(); loadIndexStatus(); loadRAGConfig
 
           <!-- 农业规程与权威溯源 -->
           <el-card shadow="never" class="detail-block">
-            <template #header><span class="block-title">🌾 农业规程与溯源元数据</span></template>
-            <p>来源与分级只是录入标注，不表示已核验；缺失范围保持未知。来源类型为“未核验”或“隔离”的条目不参与检索，其他来源仍仅作候选参考。</p>
+            <template #header><span class="block-title">来源与适用范围</span></template>
+            <el-tag :type="retrievalState(selected).tag" effect="light" class="retrieval-tag">{{ retrievalState(selected).label }}</el-tag>
+            <p class="app-note">来源与分级只是录入标注，系统不会自动核验其真实性；缺失的范围保持未知。</p>
             <div class="meta-grid">
               <div class="meta-line"><span class="meta-label">适用作物</span><el-tag size="small">{{ selected.crop || '未填写' }}</el-tag></div>
               <div class="meta-line"><span class="meta-label">适用地域</span>{{ selected.region || '未填写' }}</div>
@@ -463,7 +493,7 @@ onMounted(() => { loadCategories(); loadList(); loadIndexStatus(); loadRAGConfig
               <div class="meta-line"><span class="meta-label">防治靶标</span><span>{{ selected.disease || '未填写' }}</span></div>
               <div class="meta-line"><span class="meta-label">来源类型</span>{{ sourceLabel(selected.source_type) }}</div>
               <div class="meta-line"><span class="meta-label">分级标注</span>
-                <el-tag size="small" :type="selected.authority_level === 'L1' ? 'success' : (selected.authority_level === 'L2' ? 'primary' : 'warning')" effect="dark">
+                <el-tag size="small" :type="authorityTag(selected.authority_level)" effect="plain">
                   {{ selected.authority_level || '未核验' }}
                 </el-tag>
               </div>
@@ -475,18 +505,18 @@ onMounted(() => { loadCategories(); loadList(); loadIndexStatus(); loadRAGConfig
               <div class="meta-line"><span class="meta-label">发布日期</span><span>{{ selected.publish_date || '未标明' }}</span></div>
               <div class="meta-line full">
                 <span class="meta-label">溯源链接</span>
-                <a v-if="selected.url" :href="selected.url" target="_blank" class="url-link">{{ selected.url }}</a>
+                <a v-if="selected.url" :href="selected.url" target="_blank" rel="noopener noreferrer" class="url-link">{{ selected.url }}</a>
                 <span v-else class="text-muted">无</span>
               </div>
             </div>
           </el-card>
           <el-card shadow="never" class="detail-block">
-            <template #header><span class="block-title">❓ 问题</span></template>
+            <template #header><span class="block-title">问题</span></template>
             <el-input v-if="editMode" v-model="form.question" type="textarea" :rows="2" />
             <p v-else class="block-text">{{ selected.question }}</p>
           </el-card>
           <el-card shadow="never" class="detail-block">
-            <template #header><span class="block-title">💬 答案</span></template>
+            <template #header><span class="block-title">答案</span></template>
             <el-input v-if="editMode" v-model="form.answer" type="textarea" :rows="5" />
             <p v-else class="block-text pre">{{ selected.answer }}</p>
           </el-card>
@@ -506,16 +536,11 @@ onMounted(() => { loadCategories(); loadList(); loadIndexStatus(); loadRAGConfig
               </div>
             </el-card>
             <el-card shadow="never" class="detail-block">
-              <template #header><span class="block-title">🌾 编辑农业规程属性</span></template>
+              <template #header><span class="block-title">编辑来源与适用范围</span></template>
               <div class="field-row"><span class="field-label">适用作物</span><el-input v-model="form.crop" size="small" placeholder="如：番茄" /></div>
               <div class="field-row"><span class="field-label">生长阶段</span>
-                <el-select v-model="form.growth_stage" size="small" style="flex:1" clearable placeholder="选择阶段">
-                  <el-option label="育苗期" value="育苗期" />
-                  <el-option label="苗期营养生长" value="苗期营养生长" />
-                  <el-option label="开花坐果期" value="开花坐果期" />
-                  <el-option label="果实膨大转色期" value="果实膨大转色期" />
-                  <el-option label="采收盛期" value="采收盛期" />
-                  <el-option label="全生育期" value="全生育期" />
+                <el-select v-model="form.growth_stage" size="small" style="flex:1" clearable placeholder="选择生育期">
+                  <el-option v-for="stage in growthStageOptions" :key="stage.value" :label="stage.label" :value="stage.value" />
                 </el-select>
               </div>
               <div class="field-row"><span class="field-label">防治病害</span><el-input v-model="form.disease" size="small" placeholder="如：灰霉病、早疫病" /></div>
@@ -551,8 +576,8 @@ onMounted(() => { loadCategories(); loadList(); loadIndexStatus(); loadRAGConfig
         <!-- 编辑/保存按钮（仅选中时显示） -->
         <template v-if="selected">
           <div v-if="editMode" class="action-bar" style="margin-bottom:var(--app-space-3)">
-            <el-button type="primary" style="flex:1" @click="saveEdit">保存</el-button>
-            <el-button style="flex:1" @click="cancelEdit">取消</el-button>
+            <el-button type="primary" style="flex:1" :loading="mutating" @click="saveEdit">保存</el-button>
+            <el-button style="flex:1" :disabled="mutating" @click="cancelEdit">取消</el-button>
           </div>
           <el-button v-else type="primary" :icon="Edit" class="full-btn" style="margin-bottom:var(--app-space-3)" @click="editMode = true">编辑知识</el-button>
         </template>
@@ -562,8 +587,8 @@ onMounted(() => { loadCategories(); loadList(); loadIndexStatus(); loadRAGConfig
         <!-- 重建索引进度 -->
         <div v-if="rebuildActive" class="rebuild-progress">
           <div class="rebuild-progress-header">
-            <span class="rebuild-progress-title">🔄 重建向量索引</span>
-            <span v-if="rebuildDone" class="rebuild-progress-close" @click="rebuildActive = false">✕</span>
+            <span class="rebuild-progress-title"><el-icon><Refresh /></el-icon> 重建向量索引</span>
+            <el-button v-if="rebuildDone" :icon="Close" link size="small" aria-label="关闭重建进度" @click="rebuildActive = false" />
           </div>
           <el-progress :percentage="rebuildTotal ? Math.round(rebuildCurrent / rebuildTotal * 100) : 0" :status="rebuildFailed ? 'exception' : rebuildDone ? (rebuildFailCount > 0 ? 'warning' : 'success') : undefined" :stroke-width="14" />
           <div class="rebuild-progress-stats">
@@ -575,7 +600,7 @@ onMounted(() => { loadCategories(); loadList(); loadIndexStatus(); loadRAGConfig
 
         <div class="rag-section">
           <div class="col-title" style="margin-bottom:var(--app-space-4)"><el-icon><Setting /></el-icon> 知识分块配置</div>
-          <p>只修改后续索引写入的分块参数。现有索引需重建；检索数量、得分门限、改写与上下文上限在系统设置中配置。</p>
+          <p class="app-note">只影响之后重建的索引；检索数量、得分门限等在"系统设置"中配置。</p>
           <div class="rag-field-row"><span class="rag-field-label">Chunk 大小</span><el-input-number v-model="ragForm.chunk_size" :min="100" :max="5000" :step="100" size="small" /></div>
           <div class="rag-field-row"><span class="rag-field-label">重叠大小</span><el-input-number v-model="ragForm.chunk_overlap" :min="0" :max="1000" :step="10" size="small" /></div>
           <div class="rag-field-row"><span class="rag-field-label">Embedding</span><span class="rag-field-value">{{ embeddingModel || '未配置' }}</span></div>
@@ -584,17 +609,15 @@ onMounted(() => { loadCategories(); loadList(); loadIndexStatus(); loadRAGConfig
             <el-button :icon="Refresh" :loading="rebuildLoading" @click="doRebuild">重建向量索引</el-button>
           </div>
           <p v-if="indexStatus" class="index-info">{{ indexStatus.count }} 条向量 · 已建维度 {{ indexStatus.dimension }} · 已建模型 {{ indexStatus.embedding_model || '未标注' }}</p>
-          <p v-if="indexStatus?.index_generation">已发布代次：{{ indexStatus.index_generation }}</p>
-          <el-alert v-if="indexStatus?.needs_rebuild" :title="indexStatus.rebuild_reason || '需显式重建索引'" type="warning" :closable="false" />
-          <p>正文保存后即时用于BM25检索；模型、维度、分块或知识正文改变后，需显式重建完整向量代次。重建完成前保持安全降级。</p>
+          <p v-if="indexStatus?.index_generation" class="app-note">已发布代次：{{ indexStatus.index_generation }}</p>
         </div>
       </div>
     </aside>
 
     <!-- 添加对话框 -->
-    <el-dialog v-model="addVisible" title="添加农业规程与知识" width="620px" destroy-on-close>
-      <p>来源、分级与版本均须依据原文填写；标注不等于审核。缺失作物/范围保持未知，新条目默认未核验。</p>
-      <el-form ref="addRef" :model="addForm" :rules="addRules" label-width="80px">
+    <el-dialog v-model="addVisible" title="添加知识条目" width="620px" destroy-on-close :close-on-click-modal="!mutating">
+      <el-alert type="info" :closable="false" title="新条目默认为“未核验”，不会参与检索。请依据原文填写来源，核对后再把来源类型改为对应类别。" class="add-hint" />
+      <el-form ref="addRef" :model="addForm" :rules="addRules" label-width="80px" :disabled="mutating">
         <el-form-item label="问题" prop="question"><el-input v-model="addForm.question" type="textarea" :rows="2" placeholder="如：番茄开花坐果期灰霉病防治技术规程" /></el-form-item>
         <el-form-item label="答案" prop="answer"><el-input v-model="addForm.answer" type="textarea" :rows="4" placeholder="请输入标准规范推荐的防治用药、水肥或管理要点" /></el-form-item>
         <el-row :gutter="12">
@@ -612,13 +635,8 @@ onMounted(() => { loadCategories(); loadList(); loadIndexStatus(); loadRAGConfig
         <el-row :gutter="12">
           <el-col :span="12">
             <el-form-item label="生长阶段">
-              <el-select v-model="addForm.growth_stage" style="width:100%" placeholder="选择阶段">
-                <el-option label="育苗期" value="育苗期" />
-                <el-option label="苗期营养生长" value="苗期营养生长" />
-                <el-option label="开花坐果期" value="开花坐果期" />
-                <el-option label="果实膨大转色期" value="果实膨大转色期" />
-                <el-option label="采收盛期" value="采收盛期" />
-                <el-option label="全生育期" value="全生育期" />
+              <el-select v-model="addForm.growth_stage" style="width:100%" placeholder="选择生育期" clearable>
+                <el-option v-for="stage in growthStageOptions" :key="stage.value" :label="stage.label" :value="stage.value" />
               </el-select>
             </el-form-item>
           </el-col>
@@ -663,13 +681,13 @@ onMounted(() => { loadCategories(); loadList(); loadIndexStatus(); loadRAGConfig
           <div style="display:flex;flex-wrap:wrap;gap:var(--app-space-1)"><el-tag v-for="(kw,i) in addForm.keywords" :key="kw" closable @close="addForm.keywords.splice(i,1)">{{ kw }}</el-tag></div>
         </el-form-item>
       </el-form>
-      <template #footer><el-button @click="addVisible = false">取消</el-button><el-button type="primary" @click="submitAdd">确定</el-button></template>
+      <template #footer><el-button :disabled="mutating" @click="addVisible = false">取消</el-button><el-button type="primary" :loading="mutating" @click="submitAdd">添加</el-button></template>
     </el-dialog>
 
     <!-- 导入对话框 -->
-    <el-dialog v-model="importVisible" title="导入知识库" width="480px">
-      <p>支持导出数组或包含items数组的对象，保留来源、隔离与有效期；缺少来源时保持未核验。导入另建条目并跳过重复问题，不覆盖原ID或登记时间，也不等于备份恢复。</p>
-      <el-upload drag :auto-upload="false" :limit="1" accept=".json" :on-change="onFileChange">
+    <el-dialog v-model="importVisible" title="导入知识" width="480px" @closed="resetImport">
+      <p class="app-note">支持条目数组，或含 items 数组的导出文件。导入会新建条目并跳过重复的问题；缺少来源的条目保持"未核验"。这不是备份恢复。</p>
+      <el-upload drag :auto-upload="false" :limit="1" accept=".json,application/json" :on-change="onFileChange" :on-exceed="onFileExceed">
         <el-icon class="el-icon--upload"><Upload /></el-icon>
         <div class="el-upload__text">拖拽 JSON 文件到此处，或<em>点击上传</em></div>
       </el-upload>
@@ -677,13 +695,35 @@ onMounted(() => { loadCategories(); loadList(); loadIndexStatus(); loadRAGConfig
         <el-alert :type="importResult.errors.length ? 'warning' : 'success'" :closable="false" :title="`已导入 ${importResult.success_count} 条，跳过 ${importResult.skip_count} 条，失败 ${importResult.errors.length} 条`" />
         <p v-for="(error,index) in importResult.errors" :key="index">{{ error }}</p>
       </div>
-      <template #footer><el-button @click="importVisible = false">取消</el-button><el-button type="primary" :loading="importLoading" @click="doImport">导入</el-button></template>
+      <template #footer><el-button @click="importVisible = false">关闭</el-button><el-button type="primary" :loading="importLoading" :disabled="!importFile" @click="doImport">导入</el-button></template>
     </el-dialog>
+  </div>
   </div>
 </template>
 
 <style scoped>
-.three-col { display: flex; height: calc(100vh - 60px); background: var(--app-bg); overflow: hidden; }
+.knowledge-page { padding: var(--app-space-5) var(--app-space-6) var(--app-space-4); }
+.kb-summary {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--app-space-2);
+  margin: calc(-1 * var(--app-space-2)) 0 var(--app-space-3);
+  font-size: var(--app-text-xs);
+  line-height: 1.6;
+  color: var(--app-text-secondary);
+}
+.kb-summary.is-stale .kb-summary-text { color: var(--state-warning); }
+.kb-summary-text { min-width: 0; }
+/* 三栏高度：视口减去顶栏、页头与摘要；内部各栏独立滚动 */
+.three-col { display: flex; height: calc(100vh - 200px); min-height: 520px; background: var(--app-bg); overflow: hidden; border: 1px solid var(--app-border-light); border-radius: var(--app-radius-lg); }
+.filter-row { display: flex; flex-wrap: wrap; gap: var(--app-space-2); padding: var(--app-space-3) var(--app-space-4) 0; }
+.filter-field { width: min(160px, 100%); }
+.filter-crop { width: min(110px, 100%); }
+.list-note { padding: 0 var(--app-space-4); }
+.item-tags { display: flex; flex-wrap: wrap; align-items: center; gap: var(--app-space-1); }
+.retrieval-tag { margin-bottom: var(--app-space-2); }
+.add-hint { margin-bottom: var(--app-space-4); }
 .col { display: flex; flex-direction: column; overflow: hidden; }
 .col-left  { width: 200px; min-width: 200px; background: var(--app-surface); border-right: 1px solid var(--app-border-light); }
 .col-center { flex: 1; min-width: 0; border-right: 1px solid var(--app-border-light); background: var(--app-surface); }
@@ -701,7 +741,7 @@ onMounted(() => { loadCategories(); loadList(); loadIndexStatus(); loadRAGConfig
 .cat-item:hover .cat-ops { opacity: 1; }
 .cat-item.active { color: var(--el-color-primary); background: var(--el-color-primary-light-9); }
 .cat-item.active .cat-label { font-weight: 500; }
-.cat-label { display: flex; align-items: center; gap: var(--app-space-2); flex: 1; cursor: pointer; padding: 2px 0; }
+.cat-label { display: flex; align-items: center; gap: var(--app-space-2); flex: 1; cursor: pointer; padding: 2px 0; min-height: var(--touch-min); border: none; background: transparent; color: inherit; font: inherit; text-align: left; }
 .cat-ops { display: flex; gap: 0; opacity: 0; transition: opacity .15s; flex-shrink: 0; }
 .cat-add { padding: var(--app-space-2) var(--app-space-3); border-top: 1px solid var(--app-border-light); display: flex; gap: 6px; flex-wrap: wrap; }
 
@@ -791,5 +831,10 @@ onMounted(() => { loadCategories(); loadList(); loadIndexStatus(); loadRAGConfig
     max-height: none;
     overflow: visible;
   }
+  .col-left { max-height: 240px; }
+}
+@media (max-width: 767px) {
+  .knowledge-page { padding: var(--app-space-4) var(--app-space-3); }
+  .filter-field, .filter-crop { width: 100%; }
 }
 </style>

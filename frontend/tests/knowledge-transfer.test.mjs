@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { Script, createContext } from 'node:vm'
+import { sharedModule } from './shared-modules.mjs'
 const require = createRequire(new URL('../package.json', import.meta.url))
 const vue = require('vue'), ts = require('typescript')
 const { parse, compileScript } = require('@vue/compiler-sfc')
@@ -23,7 +24,8 @@ function harness(overrides = {}) {
       if (name === 'vue') return { ...vue, onMounted() {} }
       if (name === 'element-plus') return { ElMessage: Object.fromEntries(['success','error','warning'].map(level => [level, text => messages.push({ level, text })])), ElMessageBox: { confirm: async () => true } }
       if (name === '@/api/knowledge') return api
-      if (name === '@/api/settings' || name === '@element-plus/icons-vue') return {}
+      if (name === '@/api/settings' || name === '@element-plus/icons-vue' || name === '@/components/PageHeader.vue') return {}
+      const shared = sharedModule(name); if (shared) return shared
       throw Error(name)
     }
   }))
@@ -109,4 +111,15 @@ test('index rebuild requires a completion receipt and never calls errors or an e
     assert.equal(env.messages.some(message => message.level === 'success'), event.type === 'done')
     env.dispose()
   }
+})
+
+test('each knowledge row states whether it can take part in retrieval', () => {
+  const env = harness({})
+  const state = env.state
+  assert.match(state.retrievalState({ is_current: 1, source_type: 'quarantined' }).label, /隔离 · 不参与检索/)
+  assert.match(state.retrievalState({ is_current: 1, source_type: 'unverified' }).label, /未核验/)
+  assert.match(state.retrievalState({ is_current: 1, source_type: 'literature', effective_to: '2000-01-01' }).label, /已过期/)
+  assert.match(state.retrievalState({ is_current: 0, source_type: 'literature' }).label, /非当前版本/)
+  assert.match(state.retrievalState({ is_current: 1, source_type: 'literature' }).label, /可参与检索/)
+  env.dispose()
 })

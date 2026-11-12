@@ -10,6 +10,8 @@ declare module 'vue-router' {
     title?: string
     icon?: string
     hidden?: boolean
+    /** 侧栏分组：农场工作 / 系统管理 */
+    group?: 'farm' | 'system'
   }
 }
 
@@ -20,6 +22,7 @@ export interface MenuItem {
   title: string
   icon?: string
   roles: string[]
+  group: 'farm' | 'system'
 }
 
 // Route definitions with meta information
@@ -36,7 +39,8 @@ const routes: RouteRecordRaw[] = [
   },
   {
     path: '/',
-    redirect: '/dashboard',
+    // 按角色落地：专家去会诊工作台，其他角色去农场工作台（与登录后的去向一致）
+    redirect: () => getFirstAccessibleRoute(useAuthStore().userRole) || '/dashboard',
     meta: { hidden: true }
   },
   {
@@ -45,8 +49,9 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/Dashboard.vue'),
     meta: { 
       roles: ['admin', 'cs', 'expert', 'customer'],
-      title: '农场决策大盘',
-      icon: 'Odometer'
+      title: '农场工作台',
+      icon: 'HomeFilled',
+      group: 'farm'
     }
   },
   {
@@ -55,8 +60,9 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/FarmingCalendar.vue'),
     meta: { 
       roles: ['admin', 'cs', 'expert', 'customer'],
-      title: '农事作业日历',
-      icon: 'Calendar'
+      title: '农事日历',
+      icon: 'Calendar',
+      group: 'farm'
     }
   },
   ...['/customer-chat', '/workbench', '/products', '/human-service'].map(path => ({
@@ -73,8 +79,9 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/AgriChat.vue'),
     meta: { 
       roles: ['admin', 'cs', 'expert', 'customer'],
-      title: '农业智能决策',
-      icon: 'ChatDotRound'
+      title: '农业资料分析',
+      icon: 'ChatDotRound',
+      group: 'farm'
     }
   },
   {
@@ -83,8 +90,9 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/AgriFarms.vue'),
     meta: { 
       roles: ['admin', 'cs', 'expert', 'customer'],
-      title: '农场田块管理',
-      icon: 'OfficeBuilding'
+      title: '农场与田块',
+      icon: 'OfficeBuilding',
+      group: 'farm'
     }
   },
   {
@@ -93,8 +101,9 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/AgriDiagnosis.vue'),
     meta: { 
       roles: ['admin', 'cs', 'expert', 'customer'],
-      title: '病害诊断与会诊',
-      icon: 'Camera'
+      title: '病害初诊与会诊',
+      icon: 'Camera',
+      group: 'farm'
     }
   },
   {
@@ -104,7 +113,8 @@ const routes: RouteRecordRaw[] = [
     meta: { 
       roles: ['admin'],
       title: '知识库管理',
-      icon: 'Collection'
+      icon: 'Collection',
+      group: 'system'
     }
   },
   {
@@ -113,8 +123,9 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/Statistics.vue'),
     meta: { 
       roles: ['admin'],
-      title: '数据统计',
-      icon: 'DataAnalysis'
+      title: '平台运营统计',
+      icon: 'DataAnalysis',
+      group: 'system'
     }
   },
   {
@@ -124,7 +135,8 @@ const routes: RouteRecordRaw[] = [
     meta: { 
       roles: ['admin'],
       title: '性能监控',
-      icon: 'Odometer'
+      icon: 'Monitor',
+      group: 'system'
     }
   },
   {
@@ -133,8 +145,9 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/Logs.vue'),
     meta: { 
       roles: ['admin'],
-      title: '日志管理',
-      icon: 'Document'
+      title: '系统日志',
+      icon: 'Document',
+      group: 'system'
     }
   },
   {
@@ -144,7 +157,8 @@ const routes: RouteRecordRaw[] = [
     meta: { 
       roles: ['admin'],
       title: '用户管理',
-      icon: 'User'
+      icon: 'User',
+      group: 'system'
     }
   },
   {
@@ -154,14 +168,21 @@ const routes: RouteRecordRaw[] = [
     meta: { 
       roles: ['admin'],
       title: '系统设置',
-      icon: 'Setting'
+      icon: 'Setting',
+      group: 'system'
     }
+  },
+  {
+    path: '/network-error',
+    name: 'NetworkError',
+    component: () => import('@/views/NetworkError.vue'),
+    meta: { public: true, hidden: true, title: '网络连接失败' }
   },
   {
     path: '/:pathMatch(.*)*',
     name: 'NotFound',
-    redirect: '/',
-    meta: { hidden: true }
+    component: () => import('@/views/NotFound.vue'),
+    meta: { hidden: true, title: '页面不存在', roles: ['admin', 'cs', 'expert', 'customer'] }
   }
 ]
 
@@ -201,9 +222,14 @@ router.beforeEach(async (
   
   // Initialize auth if needed (fetch user info if not loaded)
   if (!authStore.user) {
-    const success = await authStore.fetchCurrentUser()
-    if (!success) {
-      next('/login')
+    const result = await authStore.fetchCurrentUser()
+    if (result === 'network') {
+      // 网络或服务暂不可用不等于登录失效，不清除会话、不跳登录页。
+      next({ path: '/network-error', query: { redirect: to.fullPath } })
+      return
+    }
+    if (!result) {
+      next({ path: '/login', query: { redirect: to.fullPath } })
       return
     }
   }
@@ -232,18 +258,9 @@ router.beforeEach(async (
 export function getFirstAccessibleRoute(role: string | null): string | null {
   if (!role) return null
   
-  // 管理员、农户默认进入农场决策大盘，专家进入病害会诊，客服进入人工客服
-  if (role === 'admin') return '/dashboard'
-  if (role === 'cs') return '/dashboard'
+  // 专家进入会诊工作台；其余角色（含遗留的早期客服账号）进入农场工作台
   if (role === 'expert') return '/diagnosis'
-  if (role === 'customer') return '/dashboard'
-
-  
-  for (const route of routes) {
-    if (route.meta?.roles?.includes(role) && !route.meta?.hidden) {
-      return route.path
-    }
-  }
+  if (['admin', 'cs', 'customer'].includes(role)) return '/dashboard'
   return null
 }
 
@@ -264,9 +281,24 @@ export function getMenuItems(role: string | null): MenuItem[] {
       name: route.name as string,
       title: route.meta?.title || route.name as string,
       icon: route.meta?.icon,
-      roles: route.meta?.roles || []
+      roles: route.meta?.roles || [],
+      group: route.meta?.group || 'farm'
     }))
 }
+
+// 浏览器标签标题随页面变化，便于多标签切换与历史记录辨认
+router.afterEach?.(to => {
+  if (typeof document !== 'undefined') {
+    document.title = to.meta.title ? `${to.meta.title} · AgriMind` : 'AgriMind 农业信息管理与农技协作'
+  }
+})
+
+// 懒加载页面的代码块下载失败（常见于部署更新后或网络中断）时，提示刷新而不是白屏
+router.onError?.(error => {
+  if (/Failed to fetch dynamically imported module|Loading chunk|Importing a module script failed/i.test(String(error?.message))) {
+    router.push({ path: '/network-error', query: { reason: 'chunk' } })
+  }
+})
 
 
 export default router

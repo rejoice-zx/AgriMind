@@ -12,11 +12,12 @@ import { useAuthStore } from '@/stores/auth'
 import { draftOwnerKey, saveScopedDraft, readScopedDraft } from '@/utils/scopedDraft'
 import { renderSafeMarkdown } from '@/utils/safeMarkdown'
 import { ElMessage } from 'element-plus'
+import SourceBadge from '@/components/common/SourceBadge.vue'
+import { isSprayRecord, type SourceKind } from '@/constants/agri'
 import {
   Position,
   Warning,
   CircleCheck,
-  CircleClose,
   Timer,
   InfoFilled,
   Picture,
@@ -29,9 +30,9 @@ import {
   Cpu,
   User,
   Reading,
-  CollectionTag,
   Tools,
   FirstAidKit,
+  ChatDotRound,
   MagicStick
 } from '@element-plus/icons-vue'
 import {
@@ -74,7 +75,7 @@ function selectPlanting(id: number) { activeCrop.value = activeCrops.value.find(
 const recentRecords = ref<FarmingRecord[]>([])
 
 const selectedField = computed(() => fields.value.find(field => field.id === selectedFieldId.value))
-const sprayRecords = computed(() => recentRecords.value.filter(record => ['pest_control', 'spraying', '施药', '打药', '病虫害防治'].includes(record.record_type)))
+const sprayRecords = computed(() => recentRecords.value.filter(record => isSprayRecord(record.record_type)))
 let fieldRevision = 0
 let farmRevision = 0
 
@@ -130,6 +131,15 @@ watch(() => draftOwnerKey(draftAuth.user), () => {
   restoringChatDraft = false
 }, { flush: 'sync' })
 
+// ==================== 输入区：回车发送 ====================
+
+// 中文输入法组词时按回车只是确认候选词，不能发送半句话；Shift+Enter 换行。
+function onComposerEnter(event: KeyboardEvent) {
+  if (event.isComposing || event.keyCode === 229 || event.shiftKey) return
+  event.preventDefault()
+  handleSendMessage()
+}
+
 // ==================== 输入区：表情选择 ====================
 const inputRef = ref()
 const emojiList = [
@@ -139,6 +149,17 @@ const emojiList = [
   '🐝', '🌸', '🍀', '⚠️', '✅', '❌', '📌', '💡',
   '🔍', '🧪', '🚜', '📷', '❓', '🧑‍🌾', '🗓️', '📋'
 ]
+
+// 把光标放到指定位置并聚焦输入框
+function focusComposer(pos?: number) {
+  nextTick(() => {
+    const el = inputRef.value?.textarea as HTMLTextAreaElement | undefined
+    if (!el) return
+    el.focus()
+    const at = pos ?? el.value.length
+    el.setSelectionRange(at, at)
+  })
+}
 
 // 在光标处插入表情（取不到 textarea 时追加到末尾）
 function insertEmoji(emoji: string) {
@@ -150,11 +171,7 @@ function insertEmoji(emoji: string) {
   const start = el.selectionStart ?? inputQuery.value.length
   const end = el.selectionEnd ?? start
   inputQuery.value = inputQuery.value.slice(0, start) + emoji + inputQuery.value.slice(end)
-  nextTick(() => {
-    el.focus()
-    const pos = start + emoji.length
-    el.setSelectionRange(pos, pos)
-  })
+  focusComposer(start + emoji.length)
 }
 
 // ==================== 建议提问：拖动 / 滚轮横向滚动 ====================
@@ -163,19 +180,24 @@ const chipsDrag = { down: false, startX: 0, startScroll: 0, moved: false }
 
 function onChipsPointerDown(e: PointerEvent) {
   const el = promptChipsRef.value
-  if (!el || e.pointerType === 'touch') return // 触屏走原生滚动
+  if (!el || e.pointerType === 'touch' || e.button !== 0) return // 触屏走原生滚动
   chipsDrag.down = true
   chipsDrag.startX = e.clientX
   chipsDrag.startScroll = el.scrollLeft
   chipsDrag.moved = false
-  el.setPointerCapture(e.pointerId)
+  // 不在按下时捕获指针：捕获后浏览器会把 click 派发给容器而不是按钮，单击建议就失效了
 }
 
 function onChipsPointerMove(e: PointerEvent) {
-  if (!chipsDrag.down || !promptChipsRef.value) return
+  const el = promptChipsRef.value
+  if (!chipsDrag.down || !el) return
   const dx = e.clientX - chipsDrag.startX
-  if (Math.abs(dx) > 4) chipsDrag.moved = true
-  promptChipsRef.value.scrollLeft = chipsDrag.startScroll - dx
+  if (!chipsDrag.moved && Math.abs(dx) > 4) {
+    chipsDrag.moved = true
+    // 确认是拖动后再捕获，拖出容器也能继续滚动
+    el.setPointerCapture?.(e.pointerId)
+  }
+  if (chipsDrag.moved) el.scrollLeft = chipsDrag.startScroll - dx
 }
 
 function onChipsPointerUp() {
@@ -211,6 +233,7 @@ function newConversation() {
   messages.value = []
   inputImageUrl.value = ''
 }
+const showEmptyState = computed(() => !messages.value.length && !historyLoading.value)
 async function openConversation(id: string, page = 1) {
   if (sending.value) return
   const revision = ++chatRevision
@@ -251,7 +274,9 @@ async function refreshConsultation(msg: ChatMessage) {
   catch (error: any) { ElMessage.error(error.response?.data?.detail || '读取专家反馈失败') }
   finally { msg.busy = false }
 }
-const consultationStatus = (status?: string) => ({ pending: '待专家接单', in_review: '专家处理中', resolved: '专家已答复' }[status || 'pending'] || status)
+const consultationStatus = (status?: string) => status
+  ? ({ pending: '待专家接单', in_review: '专家处理中', resolved: '专家已答复' } as Record<string, string>)[status] || status
+  : '已转交，状态待刷新'
 
 // 快捷推荐问题列表
 const quickPrompts = computed(() => {
@@ -281,7 +306,7 @@ async function initData() {
     id: 'welcome',
     role: 'agent',
     time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-    content: `👋 您好！我是 AgriMind 农业资料分析助手，负责整理信息、提示风险并转交专家，不出具农艺处方。
+    content: `您好，我是 AgriMind 农业资料分析助手，负责整理田块信息、提示风险并转交专家，不出具农艺处方。
 请选择您的真实田块。我会依据已录入档案、可用天气与知识库分析；缺少数据时会明确说明。
 目前知识库中还没有已核验的资料来源，回答会标注依据等级；施药、施肥、采收与诊断问题会转交农技专家复核。`
   })
@@ -332,8 +357,10 @@ async function uploadChatImage(options: any) {
 
 // ==================== 发送与决策交互 ====================
 
+// 点击建议提问：填入输入框并聚焦，方便补充细节后发送
 function applyPrompt(prompt: string) {
   inputQuery.value = prompt
+  focusComposer()
 }
 
 async function handleSendMessage() {
@@ -438,6 +465,17 @@ function scrollToBottom() {
 }
 
 // 依据等级：模型自评分不是准确率，界面只展示实际取得的依据类型（BUG-011）
+// 每条依据标出性质：档案/天气/观测是记录，知识库是待核验候选，视觉初诊是模型生成
+function evidenceKind(evidence: Record<string, any>): SourceKind {
+  const source = String(evidence?.source || '')
+  if (source.includes('知识库')) return 'knowledge'
+  if (source.includes('视觉') || source.includes('模型')) return 'ai'
+  if (source.includes('气象') || source.includes('天气')) return 'forecast'
+  if (source.includes('观测') || source.includes('环境')) return 'observation'
+  if (source.includes('专家')) return 'expert'
+  return 'record'
+}
+
 function evidenceLevelLabel(level?: string) {
   if (level === 'knowledge') return '有知识库候选资料（待核验）'
   if (level === 'records_only') return '仅有田块/天气/履历记录'
@@ -464,21 +502,19 @@ function toggleRightSidebar() {
   rightSidebarOpen.value = !rightSidebarOpen.value
 }
 
+// 断点与全站一致：<768 手机，<1280 侧栏为抽屉（默认收起，避免首屏被遮罩挡住），≥1440 两侧常驻。
+// 只在跨过断点时重置；手机地址栏伸缩、软键盘弹起引起的 resize 不会关掉用户刚打开的抽屉。
+let responsiveBand = ''
 function checkResponsive() {
   if (typeof window === 'undefined') return
   const w = window.innerWidth
-  isMobile.value = w < 768
-  isCompact.value = w < 1200
-  if (w < 1100) {
-    leftSidebarOpen.value = false
-    rightSidebarOpen.value = false
-  } else if (w < 1440) {
-    leftSidebarOpen.value = true
-    rightSidebarOpen.value = false
-  } else {
-    leftSidebarOpen.value = true
-    rightSidebarOpen.value = true
-  }
+  const band = w < 768 ? 'mobile' : w < 1280 ? 'compact' : w < 1440 ? 'wide' : 'full'
+  if (band === responsiveBand) return
+  responsiveBand = band
+  isMobile.value = band === 'mobile'
+  isCompact.value = band === 'mobile' || band === 'compact'
+  leftSidebarOpen.value = band === 'wide' || band === 'full'
+  rightSidebarOpen.value = band === 'full'
 }
 
 onMounted(() => {
@@ -643,6 +679,11 @@ onBeforeUnmount(() => {
       <p v-if="conversationId && turnPage !== 1" class="archive-warn">请回到第 1 页后继续提问。</p>
       <!-- 对话主体流 -->
       <div class="chat-messages-body" ref="chatBodyRef">
+        <div v-if="showEmptyState" class="chat-empty">
+          <el-icon class="chat-empty__icon"><ChatDotRound /></el-icon>
+          <p class="chat-empty__title">新的对话</p>
+          <p class="chat-empty__text">先在左侧选择田块和作物批次，再描述问题。回答会标出依据来自档案、天气、知识库还是模型推断；施药、施肥、采收与诊断类问题会建议转交农技专家。</p>
+        </div>
         <div
           v-for="msg in messages"
           :key="msg.id"
@@ -658,7 +699,7 @@ onBeforeUnmount(() => {
           <!-- 消息体 -->
           <div class="msg-content-wrapper">
             <div class="msg-meta">
-              <span class="sender-name">{{ msg.role === 'user' ? '我 (农户/农技员)' : 'AgriMind 决策中枢' }}</span>
+              <span class="sender-name">{{ msg.role === 'user' ? '我' : 'AgriMind 资料分析（模型生成）' }}</span>
               <span class="msg-time">{{ msg.time }}</span>
             </div>
 
@@ -681,12 +722,12 @@ onBeforeUnmount(() => {
               >
                 <div class="verdict-main">
                   <el-icon class="verdict-icon">
-                    <CircleCheck v-if="msg.decision.can_proceed" />
-                    <CircleClose v-else />
+                    <InfoFilled v-if="msg.decision.can_proceed" />
+                    <Warning v-else />
                   </el-icon>
                   <div>
                     <div class="verdict-title">
-                      {{ msg.decision.can_proceed ? '一般管理建议，仍须现场核对' : '暂缓实施 / 需人工复核' }}
+                      {{ msg.decision.can_proceed ? '一般性说明（需现场核对，不是作业许可）' : '暂缓实施 · 需人工复核' }}
                     </div>
                     <div class="verdict-desc markdown-body" v-html="renderSafeMarkdown(msg.decision.conclusion)" />
                   </div>
@@ -702,7 +743,7 @@ onBeforeUnmount(() => {
               <div v-if="msg.decision.risks && msg.decision.risks.length > 0" class="card-section alert-section">
                 <div class="section-badge warn">
                   <el-icon><Warning /></el-icon>
-                  <span>潜在农事与灾害风险 ({{ msg.decision.risks.length }})</span>
+                  <span>风险与缺失依据（{{ msg.decision.risks.length }}）</span>
                 </div>
                 <ul class="risk-list">
                   <li v-for="(risk, rIdx) in msg.decision.risks" :key="rIdx"><div class="markdown-body" v-html="renderSafeMarkdown(risk)" /></li>
@@ -713,7 +754,7 @@ onBeforeUnmount(() => {
               <div v-if="msg.decision.recommendations && msg.decision.recommendations.length > 0" class="card-section">
                 <div class="section-badge rec">
                   <el-icon><CircleCheck /></el-icon>
-                  <span>科学处置建议与实操规程</span>
+                  <span>模型给出的参考步骤（需结合现场与专家意见）</span>
                 </div>
                 <div class="rec-steps">
                   <div
@@ -739,17 +780,20 @@ onBeforeUnmount(() => {
                       :key="eIdx"
                       class="evidence-item"
                     >
-                      <span class="evi-title"><el-icon><CollectionTag /></el-icon>{{ evi.standard_no || evi.title || '规范规程' }}</span>
+                      <span class="evi-title">
+                        <SourceBadge :kind="evidenceKind(evi)" />
+                        <span>{{ evi.source || evi.standard_no || evi.title || '依据' }}</span>
+                      </span>
                       <div class="evi-desc markdown-body" v-html="renderSafeMarkdown(evi.summary || evi.content || evi.desc || '')" />
                     </div>
                   </div>
-                  <div v-else class="text-muted">暂无外挂标准引用</div>
+                  <div v-else class="text-muted">本次没有取得任何依据，结论仅为模型生成的一般性说明。</div>
                 </el-collapse-item>
 
                 <!-- 工具链调用审计日志 -->
                 <el-collapse-item name="traces">
                   <template #title>
-                    <span class="collapse-title"><el-icon><Tools /></el-icon>Agent 工具调用透明审计跟踪 (Tool Traces)</span>
+                    <span class="collapse-title"><el-icon><Tools /></el-icon>处理步骤记录（{{ msg.decision.tool_traces?.length || 0 }} 步）</span>
                   </template>
                   <div class="tool-traces-list">
                     <div
@@ -774,8 +818,7 @@ onBeforeUnmount(() => {
               <!-- 专家转接提示 -->
               <div v-if="msg.decision.need_expert" class="expert-turn-notice">
                 <el-icon><InfoFilled /></el-icon>
-                <span>{{ msg.decision.consultation_id ? '已创建农业咨询，等待专家处理。' : '建议农技专家复核，可转交本次提问。' }}</span>
-                <router-link to="/diagnosis">进入会诊</router-link>
+                <span>{{ msg.decision.consultation_id ? '已创建农业咨询，等待专家处理；专家答复会显示在本条下方。' : '建议农技专家复核，可转交本次提问。' }}</span>
               </div>
             </div>
             <AuthenticatedImage v-if="msg.imageUrl" :src="msg.imageUrl" alt="本次提交的现场图片" style="max-width:240px;max-height:180px" />
@@ -786,7 +829,10 @@ onBeforeUnmount(() => {
                 <p v-if="msg.consultation?.answer">{{ msg.consultation.workflow_verified ? `签署人：${msg.consultation.reviewer_name} · ${msg.consultation.reviewed_at}` : '历史答复缺少本流程签署凭据' }}。答复保留当时结论，不能自动视为当前作业许可。</p>
                 <el-button size="small" :loading="msg.busy" @click="refreshConsultation(msg)">刷新专家反馈</el-button>
               </template>
-              <el-button v-else size="small" :loading="msg.busy" @click="consult(msg)">转交农技专家</el-button>
+              <template v-else>
+                <p class="share-note">转交后，专家可以看到：本次提问与模型分析、所附照片、所选田块档案与近期农事履历。</p>
+                <el-button size="small" type="primary" plain :loading="msg.busy" @click="consult(msg)">转交农技专家</el-button>
+              </template>
             </div>
           </div>
         </div>
@@ -836,29 +882,31 @@ onBeforeUnmount(() => {
           <el-input
             ref="inputRef"
             v-model="inputQuery"
-            placeholder="请在此输入您的农事咨询，如：明天上午是否适合喷洒晚疫病药剂？"
-            :rows="2"
+            placeholder="请输入农事咨询，如：明天上午是否适合喷洒晚疫病药剂？"
+            :autosize="{ minRows: 1, maxRows: 4 }"
             type="textarea"
             resize="none"
             class="main-textarea"
-            @keydown.enter.prevent="handleSendMessage"
+            aria-label="农事咨询内容"
+            @keydown.enter="onComposerEnter"
           />
           <div class="input-toolbar">
-            <el-button text class="icon-btn restore-draft-btn" :icon="RefreshLeft" :disabled="sending || historyLoading" title="恢复本机草稿 / 原提问编号" @click="restoreChatDraft" />
+            <span class="composer-hint">Enter 发送，Shift + Enter 换行</span>
+            <el-button text class="icon-btn restore-draft-btn" :icon="RefreshLeft" :disabled="sending || historyLoading" title="恢复本机草稿 / 原提问编号" aria-label="恢复本机草稿" @click="restoreChatDraft" />
             <template v-if="retryRequest">
               <el-button text :loading="checkingRequest" @click="queryOriginalAnalysis()">查询原结果</el-button>
               <el-button text :disabled="checkingRequest" @click="queryOriginalAnalysis(true)">取消本次分析</el-button>
             </template>
             <el-popover placement="top-end" :width="308" trigger="click" popper-class="emoji-popper">
               <template #reference>
-                <el-button text class="icon-btn emoji-trigger" :disabled="sending || historyLoading || historyReadonly" title="插入表情">😊</el-button>
+                <el-button text class="icon-btn emoji-trigger" :disabled="sending || historyLoading || historyReadonly" title="插入表情" aria-label="插入表情">😊</el-button>
               </template>
-              <div class="emoji-grid">
-                <span v-for="emoji in emojiList" :key="emoji" class="emoji-item" @click="insertEmoji(emoji)">{{ emoji }}</span>
+              <div class="emoji-grid" role="listbox" aria-label="表情">
+                <button v-for="emoji in emojiList" :key="emoji" type="button" class="emoji-item" :aria-label="`插入 ${emoji}`" @click="insertEmoji(emoji)">{{ emoji }}</button>
               </div>
             </el-popover>
             <el-upload :http-request="uploadChatImage" :show-file-list="false" accept="image/jpeg,image/png,image/webp" :disabled="sending || historyLoading || historyReadonly">
-              <el-button text class="icon-btn" :icon="Picture" :disabled="sending || historyLoading || historyReadonly" title="上传现场图片" />
+              <el-button text class="icon-btn" :icon="Picture" :disabled="sending || historyLoading || historyReadonly" title="上传现场图片" aria-label="上传现场图片" />
             </el-upload>
             <el-button
               type="primary"
@@ -868,7 +916,7 @@ onBeforeUnmount(() => {
               :icon="Position"
               @click="handleSendMessage"
             >
-              提问决策
+              发送
             </el-button>
           </div>
         </div>
@@ -885,7 +933,7 @@ onBeforeUnmount(() => {
       }"
     >
       <div class="sidebar-header right-sidebar-header" v-if="isCompact">
-        <span class="sidebar-title"><el-icon><Sunny /></el-icon>微气象与用药履历</span>
+        <span class="sidebar-title"><el-icon><Sunny /></el-icon>天气参考与用药履历</span>
         <el-button
           circle
           size="small"
@@ -902,7 +950,8 @@ onBeforeUnmount(() => {
       <div class="side-card">
         <div class="side-card-title">
           <el-icon><Timer /></el-icon>
-          <span>近期植保与用药履历 (PHI)</span>
+          <span>近期植保用药履历</span>
+          <SourceBadge kind="record" />
         </div>
 
         <div v-if="sprayRecords.length === 0" class="empty-rec">
@@ -920,8 +969,8 @@ onBeforeUnmount(() => {
             </div>
             <div class="mini-rec-detail">
               <span>剂量: {{ rec.dosage || '未录入' }}</span>
-              <el-tag size="small" type="danger" effect="light" v-if="rec.safety_interval_days">
-                安全期: {{ rec.safety_interval_days }}天
+              <el-tag size="small" type="warning" effect="light" v-if="rec.safety_interval_days">
+                安全间隔期 {{ rec.safety_interval_days }} 天（录入值）
               </el-tag>
             </div>
           </div>
@@ -1577,11 +1626,64 @@ onBeforeUnmount(() => {
 
 .evi-title {
   display: inline-flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: var(--app-space-1);
+  gap: var(--app-space-2);
   font-size: var(--app-text-xs);
+  font-weight: 500;
+  color: var(--app-text);
+}
+
+/* 新对话空状态 */
+.chat-empty {
+  max-width: 460px;
+  margin: 12vh auto 0;
+  padding: 0 var(--app-space-4);
+  text-align: center;
+  color: var(--app-text-secondary);
+}
+
+.chat-empty__icon {
+  font-size: 32px;
+  color: var(--app-text-placeholder);
+}
+
+.chat-empty__title {
+  margin: var(--app-space-2) 0 var(--app-space-1);
+  font-size: var(--app-text-lg);
   font-weight: 600;
-  color: var(--el-color-primary);
+  color: var(--app-text);
+}
+
+.chat-empty__text {
+  margin: 0;
+  font-size: var(--app-text-sm);
+  line-height: 1.7;
+}
+
+.share-note {
+  margin: 0 0 var(--app-space-2);
+  font-size: var(--app-text-xs);
+  color: var(--app-text-secondary);
+}
+
+.composer-hint {
+  margin-right: auto;
+  font-size: var(--app-text-xs);
+  color: var(--app-text-placeholder);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.emoji-trigger {
+  font-size: 17px;
+  line-height: 1;
+}
+
+@media (max-width: 767px) {
+  .composer-hint { display: none; }
 }
 
 .evi-desc {
@@ -1647,7 +1749,7 @@ onBeforeUnmount(() => {
   border: 1px solid var(--app-border);
   border-radius: var(--app-radius-lg);
   background: var(--app-surface);
-  padding: 6px 12px 8px;
+  padding: 6px 12px 6px;
   transition: var(--app-transition);
 }
 
@@ -1702,14 +1804,15 @@ onBeforeUnmount(() => {
 
 .input-toolbar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: flex-end;
   gap: 2px;
 }
 
-/* 恢复草稿钮贴左，与右侧发送区分离 */
+/* 左侧是快捷键提示，按钮整体靠右 */
 .restore-draft-btn {
-  margin-right: auto;
+  margin-left: var(--app-space-2);
 }
 
 .input-toolbar .icon-btn {
@@ -1723,11 +1826,6 @@ onBeforeUnmount(() => {
 .input-toolbar .icon-btn:hover {
   color: var(--el-color-primary);
   background: var(--el-color-primary-light-9);
-}
-
-.emoji-trigger {
-  font-size: 17px;
-  line-height: 1;
 }
 
 .send-btn {
@@ -2016,13 +2114,15 @@ onBeforeUnmount(() => {
   line-height: 1.4;
   text-align: center;
   padding: 5px 0;
+  border: 0;
+  background: transparent;
   border-radius: var(--app-radius-sm);
   cursor: pointer;
-  transition: background 0.15s;
   user-select: none;
 }
 
-.emoji-popper .emoji-item:hover {
+.emoji-popper .emoji-item:hover,
+.emoji-popper .emoji-item:focus-visible {
   background: var(--app-hover);
 }
 </style>

@@ -6,6 +6,7 @@ import { Script, createContext } from 'node:vm'
 const require = createRequire(new URL('../package.json', import.meta.url))
 const vue = require('vue'), ts = require('typescript')
 const { parse, compileScript } = require('@vue/compiler-sfc')
+import { sharedModule } from './shared-modules.mjs'
 function harness(file, api, memory = new Map()) {
   const { descriptor } = parse(readFileSync(new URL(`../src/${file}.vue`, import.meta.url), 'utf8'))
   const code = ts.transpileModule(compileScript(descriptor, { id: 'archive-main' }).content, {
@@ -17,9 +18,9 @@ function harness(file, api, memory = new Map()) {
   let sequence = 0
   const dependencies = {
     vue: { ...vue, onMounted() {}, onBeforeUnmount(fn) { hooks.push(fn) } },
-    '@element-plus/icons-vue': {}, '@/stores/auth': { useAuthStore: () => auth },
+    '@element-plus/icons-vue': {}, '@/stores/auth': { useAuthStore: () => auth }, '@/components/PageHeader.vue': {},
     '@/api/agriculture': api, '@/api/knowledge': api, '@/api/settings': {},
-    'element-plus': { ElMessage: Object.fromEntries(['error','warning','success'].map(level => [level, text => messages.push(text)])), ElMessageBox: { confirm: async () => true } },
+    'element-plus': { ElMessage: Object.fromEntries(['error','warning','success'].map(level => [level, text => messages.push(text)])), ElMessageBox: { confirm: async () => true, prompt: async () => ({ value: '' }) } },
     '@/utils/requestId': { newRequestId: () => `00000000-0000-4000-8000-${String(++sequence).padStart(12,'0')}` },
     '@/utils/scopedDraft': {
       draftOwnerKey: user => String(user.id),
@@ -29,6 +30,7 @@ function harness(file, api, memory = new Map()) {
   }
   new Script(code).runInContext(createContext({ module, exports: module.exports, console, Date, require: name => {
     if (name in dependencies) return dependencies[name]
+    const shared = sharedModule(name); if (shared) return shared
     throw Error(name)
   } }))
   const state = scope.run(() => module.exports.default.setup(props, { expose() {}, emit: (...event) => events.push(event) }))

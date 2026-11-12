@@ -1,8 +1,11 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted, watch, onBeforeUnmount } from 'vue'
-import { ElMessage } from 'element-plus'
-import { Connection, Sunny, Camera, Cpu } from '@element-plus/icons-vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { Connection, Sunny, Camera, Cpu, Setting } from '@element-plus/icons-vue'
+import { onBeforeRouteLeave } from 'vue-router'
 import PageHeader from '@/components/PageHeader.vue'
+import { errorText, isDismissed } from '@/utils/errorText'
+import { useNarrowScreen } from '@/composables/useBreakpoint'
 import {
   getSettings, getSettingsSecurityStatus,
   updateSettings,
@@ -36,7 +39,12 @@ interface RAGConfig {
 
 // State
 const loading = ref(false)
-const saving = ref(false)
+const isNarrow = useNarrowScreen()
+// 设置未成功读取时，表单里只是前端默认值；此时禁止保存，以免用默认值覆盖服务器上的真实配置。
+const loadState = ref<'loading' | 'ready' | 'error'>('loading')
+const formLocked = computed(() => loadState.value !== 'ready')
+// 每个分区独立的保存状态，点一个按钮不会让其他按钮一起转圈
+const savingSection = reactive({ embedding: false, rag: false, general: false })
 const savingAgriAI = ref(false)
 const testingWeather = ref(false)
 
@@ -261,9 +269,31 @@ const timezoneOptions = [
   'UTC',
 ]
 
+// 每个分区保存成功后的快照，用于提示"未保存的修改"
+const savedSnapshots = reactive({ agri: '', embedding: '', rag: '', general: '' })
+const sectionSnapshot = {
+  agri: () => JSON.stringify([agriAIConfig.llm_base_url, agriAIConfig.llm_model, agriAIConfig.vision_base_url, agriAIConfig.vision_model,
+    agriAIConfig.weather_provider, agriAIConfig.weather_custom, weatherMappingText, agriAIConfig.llm_api_key, agriAIConfig.vision_api_key, agriAIConfig.weather_api_key]),
+  embedding: () => JSON.stringify([embeddingConfig.provider, embeddingConfig.apiUrl, embeddingConfig.model, embeddingConfig.dimension, embeddingConfig.requestDimensions, embeddingConfig.apiKey]),
+  rag: () => JSON.stringify(ragConfig),
+  general: () => JSON.stringify(generalConfig),
+}
+type Section = keyof typeof sectionSnapshot
+function markSaved(section: Section) { savedSnapshots[section] = sectionSnapshot[section]() }
+const dirty = computed(() => ({
+  agri: loadState.value === 'ready' && savedSnapshots.agri !== sectionSnapshot.agri(),
+  embedding: loadState.value === 'ready' && savedSnapshots.embedding !== sectionSnapshot.embedding(),
+  rag: loadState.value === 'ready' && savedSnapshots.rag !== sectionSnapshot.rag(),
+  general: loadState.value === 'ready' && savedSnapshots.general !== sectionSnapshot.general(),
+}))
+const anyDirty = computed(() => Object.values(dirty.value).some(Boolean))
+let savedEmbeddingIdentity = ''
+const embeddingIdentity = () => JSON.stringify([embeddingConfig.apiUrl, embeddingConfig.model, embeddingConfig.dimension, embeddingConfig.requestDimensions])
+
 // Load settings
 async function loadSettings() {
   loading.value = true
+  loadState.value = 'loading'
   try {
     const [settingsResult, providersResult] = await Promise.allSettled([getSettings(), getLLMProviders()])
     if (!alive) return
@@ -324,8 +354,13 @@ async function loadSettings() {
     for (const kind of ["decision", "vision"] as const) {
       modelTools[kind].provider = providers.value.find(item => normalizedURL(item.defaultApiUrl) === normalizedURL(modelValues(kind).url))?.name || "custom"
     }
-  } catch (error: any) {
-    ElMessage.error(error.response?.data?.detail || '加载设置失败')
+    savedEmbeddingIdentity = embeddingIdentity()
+    for (const section of Object.keys(sectionSnapshot) as Section[]) markSaved(section)
+    loadState.value = 'ready'
+  } catch (error: unknown) {
+    if (!alive) return
+    loadState.value = 'error'
+    ElMessage.error(errorText(error, '读取系统设置失败；为避免覆盖已保存的配置，已暂停编辑'))
   } finally {
     loading.value = false
   }
@@ -333,7 +368,15 @@ async function loadSettings() {
 
 // Save Embedding settings
 async function saveEmbeddingSettings() {
-  saving.value = true
+  if (formLocked.value || savingSection.embedding) return
+  // 改变地址、模型或维度会让现有向量索引不再匹配，必须先确认
+  if (embeddingIdentity() !== savedEmbeddingIdentity) {
+    try {
+      await ElMessageBox.confirm('修改 Embedding 地址、模型或维度后，现有向量索引将不再匹配，知识检索会退回关键词方式，直到管理员在知识库页重建索引。',
+        '确认修改 Embedding 配置', { type: 'warning', confirmButtonText: '保存并稍后重建索引', cancelButtonText: '取消' })
+    } catch (error) { if (isDismissed(error)) return; throw error }
+  }
+  savingSection.embedding = true
   try {
     const data: any = {
       embedding: {
@@ -351,21 +394,25 @@ async function saveEmbeddingSettings() {
     }
     
     const response = await updateSettings(data)
-    ElMessage.success('Embedding设置已保存；现有索引需核对或重建')
+    if (!alive) return
+    const changedIndex = embeddingIdentity() !== savedEmbeddingIdentity
+    ElMessage.success(changedIndex ? 'Embedding 设置已保存；请到知识库页重建索引' : 'Embedding 设置已保存')
     embeddingConfig.hasApiKey = !!(response.data as any).embedding?.has_api_key
     embeddingConfig.credentialSource = (response.data as any).embedding?.credential_source || "missing"
     embeddingConfig.apiKey = ''  // Clear the input
-    // Saved credential availability comes from the response.
-  } catch (error: any) {
-    ElMessage.error(error.response?.data?.detail || '保存失败')
+    savedEmbeddingIdentity = embeddingIdentity()
+    markSaved('embedding')
+  } catch (error: unknown) {
+    ElMessage.error(errorText(error, '保存 Embedding 设置失败'))
   } finally {
-    saving.value = false
+    savingSection.embedding = false
   }
 }
 
 // Save RAG settings
 async function saveRAGSettings() {
-  saving.value = true
+  if (formLocked.value || savingSection.rag) return
+  savingSection.rag = true
   try {
     await updateSettings({
       rag: {
@@ -375,17 +422,19 @@ async function saveRAGSettings() {
         max_context_length: ragConfig.maxContextLength
       }
     })
-    ElMessage.success('RAG设置已保存')
-  } catch (error: any) {
-    ElMessage.error(error.response?.data?.detail || '保存失败')
+    ElMessage.success('检索参数已保存，下次检索生效')
+    markSaved('rag')
+  } catch (error: unknown) {
+    ElMessage.error(errorText(error, '保存检索参数失败'))
   } finally {
-    saving.value = false
+    savingSection.rag = false
   }
 }
 
 // Save General settings
 async function saveGeneralSettings() {
-  saving.value = true
+  if (formLocked.value || savingSection.general) return
+  savingSection.general = true
   try {
     await updateSettings({
       general: {
@@ -393,15 +442,24 @@ async function saveGeneralSettings() {
       }
     })
     ElMessage.success('通用设置已保存')
-  } catch (error: any) {
-    ElMessage.error(error.response?.data?.detail || '保存失败')
+    markSaved('general')
+  } catch (error: unknown) {
+    ElMessage.error(errorText(error, '保存通用设置失败'))
   } finally {
-    saving.value = false
+    savingSection.general = false
   }
 }
 
 // Save Agri AI settings
 async function saveAgriAISettings() {
+  if (formLocked.value || savingAgriAI.value) return
+  let weatherCustom
+  try {
+    weatherCustom = agriAIConfig.weather_provider === "custom" ? weatherDraft() : undefined
+  } catch {
+    ElMessage.error('天气字段映射不是有效的 JSON 对象，请检查括号、引号和逗号')
+    return
+  }
   savingAgriAI.value = true
   try {
     const data: any = {
@@ -411,7 +469,7 @@ async function saveAgriAISettings() {
         vision_base_url: agriAIConfig.vision_base_url,
         vision_model: agriAIConfig.vision_model,
         weather_provider: agriAIConfig.weather_provider,
-        weather_custom: agriAIConfig.weather_provider === "custom" ? weatherDraft() : undefined
+        weather_custom: weatherCustom
       }
     }
     if (agriAIConfig.llm_api_key) {
@@ -437,12 +495,13 @@ async function saveAgriAISettings() {
         ? JSON.stringify(["custom", savedCustom.endpoint.trim(), savedCustom.forecast_endpoint.trim(), savedCustom.auth_type, savedCustom.auth_header])
         : JSON.stringify([saved.weather_provider || "open_meteo"])
     }
-    ElMessage.success('农业智能中枢与服务配置已保存！')
+    ElMessage.success('模型与天气服务配置已保存')
     if (agriAIConfig.llm_api_key === data.agri_ai.llm_api_key) agriAIConfig.llm_api_key = ''
     if (agriAIConfig.vision_api_key === data.agri_ai.vision_api_key) agriAIConfig.vision_api_key = ''
     if (agriAIConfig.weather_api_key === data.agri_ai.weather_api_key) agriAIConfig.weather_api_key = ''
-  } catch (error: any) {
-    ElMessage.error(error.response?.data?.detail || error.message || '保存农业AI配置失败')
+    markSaved('agri')
+  } catch (error: unknown) {
+    ElMessage.error(errorText(error, '保存模型与天气服务配置失败'))
   } finally {
     savingAgriAI.value = false
   }
@@ -455,13 +514,16 @@ async function handleTestVisionConnection() { await runModelTest('vision') }
 async function handleTestWeatherConnection() {
   if (testingWeather.value) return
   if (weatherTools.latitude === null || weatherTools.longitude === null) { ElMessage.error('请填写本次测试地点的经纬度'); return }
+  let weatherCustom
+  try { weatherCustom = agriAIConfig.weather_provider === "custom" ? weatherDraft() : undefined }
+  catch { ElMessage.error('天气字段映射不是有效的 JSON 对象，请检查括号、引号和逗号'); return }
   const signature = weatherSignature(); const revision = ++weatherRevision
   testingWeather.value = true; weatherTools.result = ''; weatherTools.passed = false
   try {
     const response = await testWeatherConnection({
       provider: agriAIConfig.weather_provider,
       api_key: agriAIConfig.weather_api_key || undefined,
-      weather_custom: agriAIConfig.weather_provider === "custom" ? weatherDraft() : undefined, latitude: weatherTools.latitude, longitude: weatherTools.longitude
+      weather_custom: weatherCustom, latitude: weatherTools.latitude, longitude: weatherTools.longitude
     })
     if (!alive || signature !== weatherSignature() || revision !== weatherRevision) return
     weatherTools.result = response.data.message || '天气接口未返回有效测试说明'
@@ -470,17 +532,29 @@ async function handleTestWeatherConnection() {
     else ElMessage.error(weatherTools.result)
   } catch (error: any) {
     if (!alive || signature !== weatherSignature() || revision !== weatherRevision) return
-    weatherTools.result = error.response?.data?.detail || error.message || '测试气象连接失败'
+    weatherTools.result = errorText(error, '天气接口测试未完成，请核对地址和网络')
     ElMessage.error(weatherTools.result)
   } finally { if (alive) testingWeather.value = false }
 }
 
 
+// 有未保存的修改时，离开页面前提示
+onBeforeRouteLeave(async () => {
+  if (!anyDirty.value) return true
+  try {
+    await ElMessageBox.confirm('还有未保存的修改，离开后这些修改会丢失。', '离开设置页', { type: 'warning', confirmButtonText: '放弃修改并离开', cancelButtonText: '留在本页' })
+    return true
+  } catch { return false }
+})
+function beforeUnload(event: BeforeUnloadEvent) { if (anyDirty.value) { event.preventDefault(); event.returnValue = '' } }
+
 // Initialize
 onMounted(() => {
   loadSecurityStatus()
   loadSettings()
+  if (typeof window !== 'undefined') window.addEventListener('beforeunload', beforeUnload)
 })
+onBeforeUnmount(() => { if (typeof window !== 'undefined') window.removeEventListener('beforeunload', beforeUnload) })
 </script>
 
 <template>
@@ -488,8 +562,20 @@ onMounted(() => {
     <el-alert v-if="encryptionStatus && !encryptionStatus.encryption_ready" :title="encryptionStatus.message" type="warning" :closable="false" show-icon style="margin-bottom: var(--app-space-4)" />
     <PageHeader
       title="系统设置"
-      description="AgriMind 农业智能决策中枢、多模态病害视觉诊断与真实气象时序系统参数配置"
+      description="文本模型、视觉模型、天气服务、Embedding 与检索参数。每个分区单独保存。"
     />
+
+    <el-alert v-if="loadState === 'error'" type="error" :closable="false" show-icon class="load-error"
+      title="未能读取已保存的设置" description="下方显示的是默认值而不是服务器上的配置；为避免误覆盖，已暂停编辑与保存。">
+      <el-button size="small" type="primary" plain @click="loadSettings">重新读取</el-button>
+    </el-alert>
+
+    <nav class="settings-nav" aria-label="设置分区">
+      <a href="#settings-models">模型与天气<span v-if="dirty.agri" class="dirty-dot" aria-label="有未保存修改" /></a>
+      <a href="#settings-embedding">Embedding<span v-if="dirty.embedding" class="dirty-dot" aria-label="有未保存修改" /></a>
+      <a href="#settings-rag">检索参数<span v-if="dirty.rag" class="dirty-dot" aria-label="有未保存修改" /></a>
+      <a href="#settings-general">通用<span v-if="dirty.general" class="dirty-dot" aria-label="有未保存修改" /></a>
+    </nav>
 
     <div
       v-loading="loading"
@@ -497,23 +583,26 @@ onMounted(() => {
     >
       <!-- AgriMind Core AI & External Services Settings -->
       <el-card
+        id="settings-models"
         class="settings-card agri-core-card"
         shadow="never"
       >
         <template #header>
           <div class="card-header">
-            <span><el-icon><Cpu /></el-icon> 农业决策大模型、多模态病害视觉与真实气象系统（AgriMind 核心服务）</span>
+            <span><el-icon><Cpu /></el-icon> 模型与天气服务</span>
+            <el-tag v-if="dirty.agri" size="small" type="warning">未保存</el-tag>
           </div>
         </template>
-        
+
         <el-form
-          label-width="120px"
-          label-position="left"
+          :label-width="isNarrow ? 'auto' : '128px'"
+          :label-position="isNarrow ? 'top' : 'left'"
+          :disabled="formLocked"
         >
           <!-- 1. 农业决策大模型 -->
           <el-divider content-position="left">
             <span class="section-title">
-              <el-icon><Cpu /></el-icon> 农业决策智能体 (Agent Decision LLM)
+              <el-icon><Cpu /></el-icon> 文本分析模型
             </span>
           </el-divider>
           
@@ -524,7 +613,7 @@ onMounted(() => {
             </el-select>
             <div class="form-tip">切换地址不自动沿用旧平台密钥；区域或网关地址请按账号资料修改。</div>
           </el-form-item>
-          <el-form-item label="决策大模型 API Key">
+          <el-form-item label="文本模型密钥">
             <el-input
               v-model="agriAIConfig.llm_api_key"
               type="password"
@@ -550,7 +639,7 @@ onMounted(() => {
             />
           </el-form-item>
 
-          <el-form-item label="决策模型名称">
+          <el-form-item label="文本模型名称">
             <el-select v-model="agriAIConfig.llm_model" filterable allow-create default-first-option placeholder="读取列表或手填模型ID" class="ctl">
               <el-option v-for="model in modelTools.decision.models" :key="model" :label="model" :value="model" />
             </el-select>
@@ -564,18 +653,24 @@ onMounted(() => {
             <el-button :loading="modelTools.decision.testing" @click="runModelTest('decision')">测试文本调用</el-button>
           </el-form-item>
           <el-alert v-if="modelTools.decision.listMessage" :title="modelTools.decision.listMessage" type="info" :closable="false" />
-          <p v-if="modelTools.decision.listRequestId">模型列表请求ID：{{ modelTools.decision.listRequestId }}</p>
+          <p v-if="modelTools.decision.listRequestId" class="form-tip">模型列表请求ID：{{ modelTools.decision.listRequestId }}</p>
           <el-alert v-if="modelTools.decision.truncated" title="列表仅展示本次响应前500项或首个分页；仍支持手填" type="warning" :closable="false" />
-          <div v-if="modelTools.decision.result">
+          <div v-if="modelTools.decision.result" class="probe-result">
             <el-alert :title="modelTools.decision.result.message" :type="modelTools.decision.result.success ? 'success' : 'warning'" :closable="false" />
-            <p v-if="modelTools.decision.result.request_id">测试请求ID：{{ modelTools.decision.result.request_id }}</p>
-            <p v-for="check in modelTools.decision.result.checks" :key="check.name">{{ modelCheckLabel(check.name) }} · {{ modelCheckState(check.state) }}（{{ check.code }}）：{{ check.message }}</p>
+            <ul class="probe-checks">
+              <li v-for="check in modelTools.decision.result.checks" :key="check.name" :class="`probe-check--${check.state}`">
+                <span class="probe-check__state">{{ modelCheckState(check.state) }}</span>
+                <span class="probe-check__name">{{ modelCheckLabel(check.name) }}</span>
+                <span class="probe-check__msg">{{ check.message }}</span>
+              </li>
+            </ul>
+            <p v-if="modelTools.decision.result.request_id" class="form-tip">测试请求ID：{{ modelTools.decision.result.request_id }}</p>
           </div>
 
           <!-- 2. 多模态病害视觉诊断 -->
           <el-divider content-position="left">
             <span class="section-title">
-              <el-icon><Camera /></el-icon> 多模态病叶视觉诊断方案 (Vision Multi-Modal API)
+              <el-icon><Camera /></el-icon> 视觉模型（病叶图像初诊）
             </span>
           </el-divider>
 
@@ -586,7 +681,7 @@ onMounted(() => {
             </el-select>
             <div class="form-tip">切换地址不自动沿用旧平台密钥；区域或网关地址请按账号资料修改。</div>
           </el-form-item>
-          <el-form-item label="视觉多模态 API Key">
+          <el-form-item label="视觉模型密钥">
             <el-input
               v-model="agriAIConfig.vision_api_key"
               type="password"
@@ -602,17 +697,6 @@ onMounted(() => {
             >
               已配置视觉密钥
             </el-tag>
-            <el-button 
-              type="info"
-              plain
-              size="small"
-              :icon="Connection" 
-              :loading="modelTools.vision.testing"
-              style="margin-left: var(--app-space-3)"
-              @click="handleTestVisionConnection"
-            >
-              测试文本与图像
-            </el-button>
           </el-form-item>
 
           <el-form-item label="视觉 Base URL">
@@ -623,7 +707,7 @@ onMounted(() => {
             />
           </el-form-item>
 
-          <el-form-item label="多模态视觉模型">
+          <el-form-item label="视觉模型名称">
             <el-select v-model="agriAIConfig.vision_model" filterable allow-create default-first-option placeholder="读取列表或手填模型ID" class="ctl">
               <el-option v-for="model in visionModelOptions" :key="model" :label="visionModelLabel(model)" :value="model" />
             </el-select>
@@ -641,26 +725,32 @@ onMounted(() => {
             </div>
           </el-form-item>
 
+          <el-form-item>
+            <el-button :icon="Connection" :loading="modelTools.vision.testing" @click="handleTestVisionConnection">测试文本与图像调用</el-button>
+          </el-form-item>
           <p v-if="visionFilterMessage" class="form-tip">{{ visionFilterMessage }}</p>
-          <p class="form-tip">测试分别检查模型列表、文本回复和随机色块图像；慢模型最长等待约80秒。列表不可用可继续手填；只通过文本不代表通过图像。</p>
+          <p class="form-tip">测试会依次检查模型列表、文本回复和随机色块图像，慢模型最长等待约 80 秒；只通过文本不代表能处理图片。</p>
 
           <el-alert v-if="modelTools.vision.listMessage" :title="modelTools.vision.listMessage" type="info" :closable="false" />
-          <p v-if="modelTools.vision.listRequestId">模型列表请求ID：{{ modelTools.vision.listRequestId }}</p>
+          <p v-if="modelTools.vision.listRequestId" class="form-tip">模型列表请求ID：{{ modelTools.vision.listRequestId }}</p>
           <el-alert v-if="modelTools.vision.truncated" title="列表仅展示本次响应前500项或首个分页；仍支持手填" type="warning" :closable="false" />
-          <div v-if="modelTools.vision.result">
+          <div v-if="modelTools.vision.result" class="probe-result">
             <el-alert :title="modelTools.vision.result.message" :type="modelTools.vision.result.success ? 'success' : 'warning'" :closable="false" />
-            <p v-if="modelTools.vision.result.request_id">测试请求ID：{{ modelTools.vision.result.request_id }}</p>
-            <p v-for="check in modelTools.vision.result.checks" :key="check.name">
-              {{ modelCheckLabel(check.name) }} · {{ modelCheckState(check.state) }}（{{ check.code }}）：{{ check.message }}
-              <br v-if="check.upstream_trace_id" /><small v-if="check.upstream_trace_id">平台追踪ID：{{ check.upstream_trace_id }}</small>
-            </p>
-            <p v-if="modelTools.vision.result.vision === 'not_tested'">图像检查尚未执行，不能据此判断所选模型不支持图片。</p>
+            <ul class="probe-checks">
+              <li v-for="check in modelTools.vision.result.checks" :key="check.name" :class="`probe-check--${check.state}`">
+                <span class="probe-check__state">{{ modelCheckState(check.state) }}</span>
+                <span class="probe-check__name">{{ modelCheckLabel(check.name) }}</span>
+                <span class="probe-check__msg">{{ check.message }}<small v-if="check.upstream_trace_id">（平台追踪ID：{{ check.upstream_trace_id }}）</small></span>
+              </li>
+            </ul>
+            <p v-if="modelTools.vision.result.request_id" class="form-tip">测试请求ID：{{ modelTools.vision.result.request_id }}</p>
+            <p v-if="modelTools.vision.result.vision === 'not_tested'" class="form-tip">图像检查尚未执行，不能据此判断所选模型不支持图片。</p>
           </div>
 
           <!-- 3. 真实气象时序系统 -->
           <el-divider content-position="left">
             <span class="section-title">
-              <el-icon><Sunny /></el-icon> 真实经纬度气象时序与预测服务 (Weather Service API)
+              <el-icon><Sunny /></el-icon> 室外天气服务
             </span>
           </el-divider>
 
@@ -725,7 +815,7 @@ onMounted(() => {
               :loading="testingWeather" 
               @click="handleTestWeatherConnection"
             >
-              测试真实气象接口连通性
+              测试天气接口
             </el-button>
             <div class="form-tip">
               测试使用上方填写的地点，可能产生平台调用费用；业务查询使用田块／农场绑定坐标。测试不保存配置，不证明数据质量或作业获准。
@@ -734,13 +824,14 @@ onMounted(() => {
 
           <el-alert v-if="weatherTools.result" :title="weatherTools.result" :type="weatherTools.passed ? 'success' : 'warning'" :closable="false" />
 
-          <el-form-item style="margin-top: var(--app-space-6);">
+          <el-form-item class="save-row">
             <el-button
               type="primary"
               :loading="savingAgriAI"
+              :disabled="formLocked"
               @click="saveAgriAISettings"
             >
-              保存农业中枢与服务配置
+              保存模型与天气配置
             </el-button>
           </el-form-item>
         </el-form>
@@ -748,18 +839,21 @@ onMounted(() => {
 
       <!-- Embedding Settings -->
       <el-card
+        id="settings-embedding"
         class="settings-card"
         shadow="never"
       >
         <template #header>
           <div class="card-header">
-            <span><el-icon><Setting /></el-icon> Embedding模型配置</span>
+            <span><el-icon><Setting /></el-icon> Embedding 向量模型</span>
+            <el-tag v-if="dirty.embedding" size="small" type="warning">未保存</el-tag>
           </div>
         </template>
-        
+
         <el-form
-          label-width="140px"
-          label-position="left"
+          :label-width="isNarrow ? 'auto' : '140px'"
+          :label-position="isNarrow ? 'top' : 'left'"
+          :disabled="formLocked"
         >
           <el-form-item label="提供商">
             <el-select
@@ -796,12 +890,20 @@ onMounted(() => {
               已配置
             </el-tag>
             <el-tag
-              v-else
+              v-else-if="embeddingConfig.credentialSource !== 'missing'"
               type="info"
               size="small"
               style="margin-left: var(--app-space-3)"
             >
-              使用LLM密钥
+              复用同地址密钥
+            </el-tag>
+            <el-tag
+              v-else
+              type="warning"
+              size="small"
+              style="margin-left: var(--app-space-3)"
+            >
+              未配置密钥
             </el-tag>
           </el-form-item>
           
@@ -865,10 +967,11 @@ onMounted(() => {
           <el-form-item>
             <el-button
               type="primary"
-              :loading="saving"
+              :loading="savingSection.embedding"
+              :disabled="formLocked"
               @click="saveEmbeddingSettings"
             >
-              保存Embedding设置
+              保存 Embedding 设置
             </el-button>
           </el-form-item>
         </el-form>
@@ -876,18 +979,21 @@ onMounted(() => {
 
       <!-- RAG Settings -->
       <el-card
+        id="settings-rag"
         class="settings-card"
         shadow="never"
       >
         <template #header>
           <div class="card-header">
-            <span><el-icon><Setting /></el-icon> RAG参数配置（农业检索）</span>
+            <span><el-icon><Setting /></el-icon> 知识检索参数</span>
+            <el-tag v-if="dirty.rag" size="small" type="warning">未保存</el-tag>
           </div>
         </template>
-        
+
         <el-form
-          label-width="140px"
-          label-position="left"
+          :label-width="isNarrow ? 'auto' : '140px'"
+          :label-position="isNarrow ? 'top' : 'left'"
+          :disabled="formLocked"
         >
           <el-form-item label="检索数量 (Top-K)">
             <el-slider
@@ -942,10 +1048,11 @@ onMounted(() => {
           <el-form-item>
             <el-button
               type="primary"
-              :loading="saving"
+              :loading="savingSection.rag"
+              :disabled="formLocked"
               @click="saveRAGSettings"
             >
-              保存RAG设置
+              保存检索参数
             </el-button>
           </el-form-item>
         </el-form>
@@ -953,18 +1060,21 @@ onMounted(() => {
 
       <!-- General Settings -->
       <el-card
+        id="settings-general"
         class="settings-card"
         shadow="never"
       >
         <template #header>
           <div class="card-header">
-            <span><el-icon><Setting /></el-icon> 通用配置</span>
+            <span><el-icon><Setting /></el-icon> 通用</span>
+            <el-tag v-if="dirty.general" size="small" type="warning">未保存</el-tag>
           </div>
         </template>
-        
+
         <el-form
-          label-width="140px"
-          label-position="left"
+          :label-width="isNarrow ? 'auto' : '140px'"
+          :label-position="isNarrow ? 'top' : 'left'"
+          :disabled="formLocked"
         >
           <el-form-item label="系统时区">
             <el-select
@@ -982,14 +1092,15 @@ onMounted(() => {
               />
             </el-select>
             <div class="form-tip">
-              所有时间显示将使用此时区，默认 Asia/Shanghai (UTC+8)
+              用于服务器日志时间格式；农业业务日期（作业日、天气日）固定按北京时间计算，页面显示暂不随此项变化。
             </div>
           </el-form-item>
           
           <el-form-item>
             <el-button
               type="primary"
-              :loading="saving"
+              :loading="savingSection.general"
+              :disabled="formLocked"
               @click="saveGeneralSettings"
             >
               保存通用设置
@@ -1013,15 +1124,107 @@ onMounted(() => {
   margin-bottom: var(--app-space-5);
 }
 
-/* 核心服务卡：主色 emerald 浅阶描边 + 顶部分层，暗色下随令牌自动转深 */
+.settings-card {
+  scroll-margin-top: 76px;
+}
+
+.load-error {
+  margin-bottom: var(--app-space-4);
+}
+
+.load-error :deep(.el-alert__description) {
+  margin-bottom: var(--app-space-2);
+}
+
+/* 分区锚点导航：长表单内快速定位，并标出未保存的分区 */
+.settings-nav {
+  position: sticky;
+  top: 60px;
+  z-index: 5;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--app-space-1);
+  margin-bottom: var(--app-space-4);
+  padding: var(--app-space-2);
+  border: 1px solid var(--app-border-light);
+  border-radius: var(--app-radius-lg);
+  background: var(--app-surface);
+}
+
+.settings-nav a {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--app-space-1);
+  min-height: var(--touch-min);
+  padding: 0 var(--app-space-3);
+  border-radius: var(--app-radius-md);
+  color: var(--app-text-secondary);
+  font-size: var(--app-text-sm);
+  text-decoration: none;
+}
+
+.settings-nav a:hover {
+  background: var(--app-hover);
+  color: var(--app-text);
+}
+
+.dirty-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--state-warning);
+}
+
 .agri-core-card {
-  border: 1px solid var(--el-color-primary-light-7);
-  background: linear-gradient(180deg, var(--el-color-primary-light-9) 0%, var(--app-surface) 120px);
+  border-color: var(--el-color-primary-light-7);
 }
 
 .card-header {
   display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: var(--app-space-2);
+}
+
+.save-row {
+  margin-top: var(--app-space-5);
+}
+
+/* 连接测试结果：逐项检查清单 */
+.probe-result {
+  margin: var(--app-space-2) 0 var(--app-space-4);
+}
+
+.probe-checks {
+  margin: var(--app-space-2) 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: var(--app-space-1);
+}
+
+.probe-checks li {
+  display: grid;
+  grid-template-columns: 56px 120px 1fr;
+  gap: var(--app-space-2);
+  font-size: var(--app-text-sm);
+  line-height: 1.5;
+}
+
+.probe-check__state {
+  font-weight: 500;
+  color: var(--state-info);
+}
+
+.probe-check--passed .probe-check__state { color: var(--state-success); }
+.probe-check--failed .probe-check__state { color: var(--state-danger); }
+
+.probe-check__name {
+  color: var(--app-text);
+}
+
+.probe-check__msg {
+  color: var(--app-text-secondary);
 }
 
 .card-header span {
@@ -1094,6 +1297,11 @@ onMounted(() => {
 
   :deep(.el-form-item__content) {
     flex-wrap: wrap;
+  }
+
+  .probe-checks li {
+    grid-template-columns: 1fr;
+    gap: 0;
   }
 }
 </style>

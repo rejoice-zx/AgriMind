@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { Script, createContext } from 'node:vm'
+import { sharedModule } from './shared-modules.mjs'
 
 const require = createRequire(new URL('../package.json', import.meta.url))
 const ts = require('typescript'), vue = require('vue')
@@ -14,7 +15,7 @@ function execute(source, dependencies) {
     module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true
   } }).outputText
   new Script(code).runInContext(createContext({ module, exports: module.exports, console,
-    require: name => { if (name in dependencies) return dependencies[name]; throw Error(name) } }))
+    require: name => { if (name in dependencies) return dependencies[name]; const shared = sharedModule(name); if (shared) return shared; throw Error(name) } }))
   return module.exports
 }
 const markdown = execute(readFileSync(new URL('../src/utils/safeMarkdown.ts', import.meta.url), 'utf8'), {

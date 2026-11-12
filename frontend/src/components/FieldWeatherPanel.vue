@@ -52,9 +52,9 @@ onBeforeUnmount(() => { revision++; clearInterval(timer); document.removeEventLi
 <template>
   <!-- 行内轻量徽标模式：专门用于农场看板地域旁边简略显示 -->
   <span v-if="inline" class="weather-inline-badge">
-    <el-popover placement="bottom" :width="320" trigger="hover" popper-class="weather-detail-popover">
+    <el-popover placement="bottom" :width="320" trigger="click" popper-class="weather-detail-popover">
       <template #reference>
-        <span class="inline-badge-content" :class="{ 'is-loading': loading }">
+        <span class="inline-badge-content" :class="{ 'is-loading': loading }" role="button" tabindex="0" aria-label="查看室外天气详情">
           <el-icon class="inline-weather-icon"><Sunny /></el-icon>
           <span class="inline-weather-title">室外气象：</span>
           <template v-if="!fieldId && !farmId">
@@ -65,7 +65,7 @@ onBeforeUnmount(() => { revision++; clearInterval(timer); document.removeEventLi
           </template>
           <template v-else-if="weather">
             <span class="inline-temp">{{ value(weather.current.temperature, '℃') }}</span>
-            <span class="inline-desc">{{ forecast?.weather || weather.summary || '监测中' }}</span>
+            <span class="inline-desc">{{ forecast?.weather || weather.summary || '天气描述缺失' }}</span>
             <span class="inline-meta-extra">湿度 {{ value(weather.current.humidity, '%') }} · 降水 {{ value(weather.current.rainfall, 'mm') }}</span>
             <el-tag
               :type="weather.status === 'online' ? 'success' : 'warning'"
@@ -85,7 +85,7 @@ onBeforeUnmount(() => { revision++; clearInterval(timer); document.removeEventLi
       <!-- 悬浮弹窗详情与手动刷新 -->
       <div class="popover-weather-content">
         <div class="popover-header">
-          <strong>微气象与预报详情</strong>
+          <strong>室外天气与预报详情</strong>
           <div style="display: flex; align-items: center; gap: 6px;">
             <el-tag size="small" :type="weather?.status === 'online' ? 'success' : 'warning'">{{ statusLabel }}</el-tag>
             <el-button
@@ -147,12 +147,12 @@ onBeforeUnmount(() => { revision++; clearInterval(timer); document.removeEventLi
     </div>
 
     <div class="compact-body">
-      <div v-if="!fieldId && !farmId" class="compact-tip-text">请选择田块；未绑定传感器</div>
+      <div v-if="!fieldId && !farmId" class="compact-tip-text">请选择田块后查看室外天气</div>
       <div v-else-if="error" class="compact-error-text" role="alert">{{ error }}</div>
       <template v-else-if="weather">
         <div class="compact-primary-row">
           <span class="compact-temp-value">{{ value(weather.current.temperature, '℃') }}</span>
-          <span class="compact-weather-state">{{ forecast?.weather || weather.summary || '微气象监测' }}</span>
+          <span class="compact-weather-state">{{ forecast?.weather || weather.summary || '天气描述缺失' }}</span>
         </div>
         <div class="compact-sub-row">
           <span>湿度 {{ value(weather.current.humidity, '%') }}</span>
@@ -160,13 +160,13 @@ onBeforeUnmount(() => { revision++; clearInterval(timer); document.removeEventLi
           <span>风速 {{ value(weather.current.wind_speed, 'm/s') }}</span>
           <span class="sub-dot">·</span>
           <span>降水 {{ value(weather.current.rainfall, 'mm') }}</span>
-          <el-popover placement="bottom" :width="300" trigger="hover" popper-class="weather-detail-popover">
+          <el-popover placement="bottom" :width="300" trigger="click" popper-class="weather-detail-popover">
             <template #reference>
-              <el-icon class="compact-info-icon"><InfoFilled /></el-icon>
+              <button type="button" class="compact-info-btn" aria-label="查看天气预报详情"><el-icon class="compact-info-icon"><InfoFilled /></el-icon></button>
             </template>
             <div class="popover-weather-content">
               <div class="popover-header">
-                <strong>微气象与预报详情</strong>
+                <strong>室外天气与预报详情</strong>
                 <el-tag size="small" :type="weather.status === 'online' ? 'success' : 'warning'">{{ statusLabel }}</el-tag>
               </div>
               <p class="popover-summary">{{ weather.summary }}；{{ weather.environment?.notice || '外部天气不能代表棚内实况，设施条件须现场核对。' }}</p>
@@ -186,7 +186,7 @@ onBeforeUnmount(() => { revision++; clearInterval(timer); document.removeEventLi
           </el-popover>
         </div>
       </template>
-      <div v-else class="compact-tip-text">正在查询微气象...</div>
+      <div v-else class="compact-tip-text">正在查询室外天气…</div>
     </div>
   </section>
 
@@ -205,7 +205,7 @@ onBeforeUnmount(() => { revision++; clearInterval(timer); document.removeEventLi
     </div>
 
     <div v-if="!fieldId && !farmId" class="empty-tip-card">
-      请选择田块；尚未绑定大棚传感器实测数据。
+      请选择田块后查看室外天气；本系统未接入棚内传感器实测数据。
     </div>
     <div v-else-if="error" class="error-tip-card" role="alert">
       {{ error }}
@@ -215,7 +215,7 @@ onBeforeUnmount(() => { revision++; clearInterval(timer); document.removeEventLi
       <div class="weather-hero-card">
         <div class="hero-left">
           <span class="hero-temp">{{ value(weather.current.temperature, '℃') }}</span>
-          <span class="hero-condition">{{ forecast?.weather || weather.summary || '晴好' }}</span>
+          <span class="hero-condition">{{ forecast?.weather || weather.summary || '天气描述缺失' }}</span>
         </div>
         <div class="hero-right" v-if="forecast">
           <div class="temp-range">{{ value(forecast.temp_min, '℃') }} ~ {{ value(forecast.temp_max, '℃') }}</div>
@@ -348,6 +348,18 @@ onBeforeUnmount(() => { revision++; clearInterval(timer); document.removeEventLi
 
 .sub-dot {
   color: var(--app-text-placeholder);
+}
+
+.compact-info-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  min-height: 24px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
 }
 
 .compact-info-icon {

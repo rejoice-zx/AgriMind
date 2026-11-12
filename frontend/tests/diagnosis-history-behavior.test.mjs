@@ -3,6 +3,7 @@ import { test } from 'node:test'
 import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { Script, createContext } from 'node:vm'
+import { sharedModule } from './shared-modules.mjs'
 const require = createRequire(new URL('../package.json', import.meta.url))
 const { parse, compileScript } = require('@vue/compiler-sfc')
 const ts = require('typescript')
@@ -21,6 +22,7 @@ function harness(overrides = {}, role = 'customer', confirm = async () => {}) {
       ElMessageBox: { confirm: (...args) => { confirmations.push(args); return confirm(...args) } } }
     if (name === '@/stores/auth') return { useAuthStore: () => ({ user: { role } }) }
     if (name === '@/api/agriculture') return api
+    const shared = sharedModule(name); if (shared) return shared
     throw Error(name)
   } }))
   const scope = vue.effectScope()

@@ -108,18 +108,21 @@ export const useAuthStore = defineStore('auth', () => {
     router.push('/login')
   }
 
-  // Fetch current user info
-  async function fetchCurrentUser(): Promise<boolean> {
+  // Fetch current user info.
+  // Returns true on success, false when the session is invalid (cleared), and 'network'
+  // when the server could not be reached — an outage must not log the user out.
+  async function fetchCurrentUser(): Promise<boolean | 'network'> {
     if (!token.value) {
       return false
     }
-    
+
     try {
       const response = await getCurrentUser()
       setUser(response.data)
       return true
-    } catch {
-      // Token might be invalid
+    } catch (err: unknown) {
+      const status = (err as { response?: { status?: number } })?.response?.status
+      if (!status || status >= 500) return 'network'
       clearAuth()
       return false
     }

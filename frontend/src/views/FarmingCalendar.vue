@@ -7,6 +7,7 @@ import {
   Warning,
   Plus,
   CloseBold,
+  Clock,
   CircleCheck,
   Cpu,
   Notebook,
@@ -36,6 +37,9 @@ import { useAuthStore } from '@/stores/auth'
 import { newRequestId } from '@/utils/requestId'
 import { draftOwnerKey } from '@/utils/scopedDraft'
 import { saveFarmingDraft, readFarmingDraft, clearFarmingDraft } from '@/utils/farmingDraft'
+import { recordKind, RECORD_TYPE_OPTIONS, PHI_MAX_DAYS } from '@/constants/agri'
+import { errorText } from '@/utils/errorText'
+import SourceBadge from '@/components/common/SourceBadge.vue'
 import { planConfirmationReason, planExecutionLabel, markPlanItemsCompleted, planProofNeedsRenewal, renewedPlanItems, planUpdateLabel } from '@/utils/planConfirmation'
 
 // ==================== 状态 ====================
@@ -252,6 +256,9 @@ function handleDateClick(dateStr: string) {
   selectedDateStr.value = dateStr
 }
 
+// 在日历上选了未来日期再点"记一笔"时，默认改为今天（实绩只能记已发生的事）
+function recordDateFor(day: string) { return day > businessDate() ? businessDate() : day }
+
 function openAddRecordDialog() {
   if (!selectedFieldId.value) {
     ElMessage.warning('请先选择农场与田块')
@@ -267,7 +274,7 @@ function openAddRecordDialog() {
   }
   recordForm.value.request_id = undefined
   recordForm.value = { field_id: selectedFieldId.value, crop_planting_id: activeCrop.value?.id,
-    record_type: recordForm.value.record_type, operation_date: selectedDateStr.value, operation_content: '', safety_interval_days: undefined }
+    record_type: recordForm.value.record_type, operation_date: recordDateFor(selectedDateStr.value), operation_content: '', safety_interval_days: undefined }
   recordDialogVisible.value = true
   restoringDraft = false
 }
@@ -319,10 +326,13 @@ async function discardCalendarDraft() {
     if (fieldId !== selectedFieldId.value || owner !== draftOwnerKey(auth.user)) return
     restoringDraft = true
     clearFarmingDraft(owner, fieldId)
-    recordForm.value = { field_id: fieldId, crop_planting_id: activeCrop.value?.id, record_type: 'fertilization', operation_date: selectedDateStr.value, operation_content: '' }
+    recordForm.value = { field_id: fieldId, crop_planting_id: activeCrop.value?.id, record_type: 'fertilization', operation_date: recordDateFor(selectedDateStr.value), operation_content: '' }
     recordDraftNotice.value = ''; restoringDraft = false
   } catch { /* Keep the existing draft when cancellation occurs. */ }
 }
+
+const applyingKey = ref('')
+const planItemKey = (item: PlanItem) => `${item.date}:${item.record_type}:${item.action}`
 
 async function handleApplyTask(item: PlanItem) {
   if (!selectedFieldId.value || applyingPlan.value) return
@@ -330,12 +340,14 @@ async function handleApplyTask(item: PlanItem) {
   if (blocked) { ElMessage.warning(blocked); return }
   const fieldId = selectedFieldId.value
   applyingPlan.value = true
+  applyingKey.value = planItemKey(item)
   try {
     if (planProofNeedsRenewal(item)) item = (await renewConfirmation([item], fieldId))[0]!
     const res = await applyAgriPlan({
       field_id: fieldId,
       items: [item],
-      operator: '农场管理员'
+      // 后端以登录账号作为签署人；这里只作为显示用的执行人
+      operator: auth.user?.display_name || auth.user?.username || ''
     })
     markPlanItemsCompleted(currentPlan.value, fieldId, [item], res.data.record_ids || [])
     ElMessage.success(res.data.message || '计划项已确认执行并落库为农事记录')
@@ -344,22 +356,18 @@ async function handleApplyTask(item: PlanItem) {
       const recRes = await getFarmingRecords(fieldId)
       if (selectedFieldId.value === fieldId) farmingRecords.value = recRes.data || []
     } catch { ElMessage.warning('事项已确认，履历刷新失败，请刷新页面查看') }
-  } catch (err: any) {
-    ElMessage.error('执行落库失败: ' + (err.response?.data?.detail || err.message))
-  } finally { applyingPlan.value = false }
+  } catch (err: unknown) {
+    ElMessage.error(errorText(err, '确认失败，请刷新后重试'))
+  } finally { applyingPlan.value = false; applyingKey.value = '' }
 }
 
-function getRecordTypeTag(type: string) {
-  const map: Record<string, string> = {
-    irrigation: 'primary',
-    fertilization: 'warning',
-    pest_control: 'danger',
-    field_management: 'success',
-    weeding: 'info',
-    harvesting: 'success'
-  }
-  return map[type] || 'info'
-}
+// 农事类型：历史数据里中英文同义值统一归类显示
+const getRecordTypeTag = (type: string) => recordKind(type).tag
+const recordTypeLabel = (type: string) => recordKind(type).label
+// 已执行实绩不能登记在未来
+const disableFutureDate = (date: Date) => date.getTime() > new Date(`${businessDate()}T23:59:59`).getTime()
+const recordTypeOptions = RECORD_TYPE_OPTIONS
+const phiMax = PHI_MAX_DAYS
 
 onMounted(() => {
   initCalendar()
@@ -377,15 +385,17 @@ onBeforeUnmount(() => {
   <div class="app-page calendar-page" v-loading="loading">
     <!-- 头部工具栏 -->
     <PageHeader
-      title="农事日历与作业排程看板"
-      description="记录田间作业实绩，查看已保存的农事检查建议与天气风险"
+      title="农事日历"
+      description="已执行的农事履历与系统检查提醒。检查提醒只是巡查清单，不是农艺处方。"
     >
       <template #actions>
         <el-select
           v-model="selectedFarmId"
-          placeholder="切换农场"
-          style="width: 200px"
+          placeholder="选择农场"
+          class="ctx-select"
+          aria-label="选择农场"
         >
+          <template #prefix><span class="ctx-prefix">农场</span></template>
           <el-option
             v-for="f in farms"
             :key="f.id"
@@ -396,10 +406,12 @@ onBeforeUnmount(() => {
 
         <el-select
           v-model="selectedFieldId"
-          placeholder="切换田块"
-          style="width: 170px"
+          placeholder="选择田块"
+          class="ctx-select ctx-select--narrow"
+          aria-label="选择田块"
           @change="handleFieldChange"
         >
+          <template #prefix><span class="ctx-prefix">田块</span></template>
           <el-option
             v-for="fd in fields"
             :key="fd.id"
@@ -408,11 +420,12 @@ onBeforeUnmount(() => {
           />
         </el-select>
 
-        <el-select v-if="activeCrops.length > 1" :model-value="activeCrop?.id" :disabled="applyingPlan" placeholder="选择作物批次" @change="selectPlanting">
+        <el-select v-if="activeCrops.length > 1" :model-value="activeCrop?.id" :disabled="applyingPlan" placeholder="选择作物批次" class="ctx-select" aria-label="选择作物批次" @change="selectPlanting">
+          <template #prefix><span class="ctx-prefix">批次</span></template>
           <el-option v-for="crop in activeCrops" :key="crop.id" :value="crop.id" :label="`${crop.crop} · ${crop.planting_date} · #${crop.id}`" />
         </el-select>
         <el-button :loading="planLoading" :disabled="!selectedFieldId || applyingPlan || cropLoading"
-          @click="selectedFieldId && fetchPlan(selectedFieldId, fieldRequestVersion, true)">刷新推演</el-button>
+          @click="selectedFieldId && fetchPlan(selectedFieldId, fieldRequestVersion, true)">刷新检查提醒</el-button>
         <el-button
           type="primary"
           :icon="Plus"
@@ -428,6 +441,10 @@ onBeforeUnmount(() => {
       <!-- 左侧：Element Plus 月度日历卡片 -->
       <div class="calendar-main-card">
         <el-card shadow="never" class="inner-card">
+          <div class="calendar-legend" aria-label="图例">
+            <span><i class="legend-dot bg-record" />已执行履历（实心）</span>
+            <span><i class="legend-dot legend-dot--hollow bg-plan" />检查提醒（空心）</span>
+          </div>
           <el-calendar v-model="calendarDate">
             <template #date-cell="{ data }">
               <div
@@ -438,13 +455,13 @@ onBeforeUnmount(() => {
                 <div class="day-number">{{ data.day.split('-')[2] }}</div>
 
                 <!-- 历史实绩小圆点 -->
-                <div v-if="recordsByDate[data.day]" class="cell-event-badge bg-record">
+                <div v-if="recordsByDate[data.day]" class="cell-event-badge bg-record" :aria-label="`${recordsByDate[data.day].length} 条已执行履历`">
                   <span>{{ recordsByDate[data.day].length }} 履历</span>
                 </div>
 
                 <!-- 智能计划小圆点 -->
-                <div v-if="plansByDate[data.day]" class="cell-event-badge bg-plan">
-                  <span>{{ plansByDate[data.day].length }} 建议</span>
+                <div v-if="plansByDate[data.day]" class="cell-event-badge bg-plan" :aria-label="`${plansByDate[data.day].length} 条检查提醒`">
+                  <span>{{ plansByDate[data.day].length }} 提醒</span>
                 </div>
               </div>
             </template>
@@ -458,15 +475,7 @@ onBeforeUnmount(() => {
           <template #header>
             <div class="side-header">
               <span class="side-title"><el-icon><Document /></el-icon> {{ selectedDateStr }} 农事明细</span>
-              <el-button
-                size="small"
-                type="primary"
-                plain
-                :icon="Plus"
-                @click="openAddRecordDialog"
-              >
-                记录实绩
-              </el-button>
+
             </div>
           </template>
 
@@ -474,7 +483,8 @@ onBeforeUnmount(() => {
           <el-divider />
           <!-- 1. 计划推演建议项 -->
           <div class="side-section-title">
-            <span><el-icon><Cpu /></el-icon> 农事检查建议</span>
+            <span><el-icon><Cpu /></el-icon> 系统检查提醒</span>
+            <SourceBadge kind="ai" label="系统生成 · 非处方" />
           </div>
 
           <div v-if="currentPlan" class="plan-metadata">
@@ -501,11 +511,11 @@ onBeforeUnmount(() => {
                 <span v-else-if="p.execution_status === 'revoked' || p.execution_status === 'unavailable'" class="status-danger">
                   <el-icon><CloseBold /></el-icon> {{ planExecutionLabel(p) }}
                 </span>
-                <span v-else-if="p.can_proceed" class="status-safe">
-                  <el-icon><CircleCheck /></el-icon> 待人工确认
+                <span v-else-if="p.can_proceed" class="status-pending">
+                  <el-icon><Clock /></el-icon> 待确认
                 </span>
                 <span v-else class="status-danger">
-                  <el-icon><CloseBold /></el-icon> 需核实 / 暂缓
+                  <el-icon><Warning /></el-icon> 需核实 / 暂缓
                 </span>
               </div>
               <p class="task-p">{{ p.description }}</p>
@@ -519,7 +529,7 @@ onBeforeUnmount(() => {
                   size="small"
                   plain
                   :disabled="!!planConfirmationReason(p) || applyingPlan || planLoading"
-                  :loading="applyingPlan"
+                  :loading="applyingKey === planItemKey(p)"
                   @click="handleApplyTask(p)"
                 >
                   {{ planExecutionLabel(p, '确认今日已完成') }}
@@ -528,13 +538,14 @@ onBeforeUnmount(() => {
               </div>
             </div>
           </div>
-          <div v-else class="empty-hint">当日无推演建议</div>
+          <div v-else class="empty-hint">当日没有检查提醒</div>
 
           <el-divider style="margin: 16px 0" />
 
           <!-- 2. 当日已执行农事实绩 -->
           <div class="side-section-title">
             <span><el-icon><Notebook /></el-icon> 当日已执行农事履历</span>
+            <SourceBadge kind="record" />
           </div>
 
           <div v-if="recordsLoading" class="empty-hint">正在加载农事履历…</div>
@@ -546,19 +557,19 @@ onBeforeUnmount(() => {
             >
               <div class="side-record-header">
                 <el-tag size="small" :type="getRecordTypeTag(r.record_type)">
-                  {{ r.record_type === 'inspection' ? '现场检查（非作业实施）' : r.record_type }}
+                  {{ recordTypeLabel(r.record_type) }}
                 </el-tag>
-                <span class="side-record-op">执行人: {{ r.operator || '农户' }}</span>
+                <span class="side-record-op">执行人：{{ r.operator || '未填写' }}</span>
               </div>
               <div class="side-record-content">
                 {{ r.operation_content || r.chemical_name }}
               </div>
               <div v-if="r.safety_interval_days != null" class="phi-tag">
-                安全间隔期: {{ r.safety_interval_days }} 天
+                安全间隔期 {{ r.safety_interval_days }} 天（录入值，以产品标签为准）
               </div>
             </div>
           </div>
-          <div v-else class="empty-hint">当日尚无已落库的农事实绩</div>
+          <div v-else class="empty-hint">当日还没有农事记录</div>
         </el-card>
       </div>
     </div>
@@ -566,7 +577,7 @@ onBeforeUnmount(() => {
     <!-- 弹窗：手工记录一笔农事 -->
     <el-dialog
       v-model="recordDialogVisible"
-      title="记录田间农事作业实绩"
+      title="记录已完成的农事"
       width="520px"
       destroy-on-close
     >
@@ -575,12 +586,7 @@ onBeforeUnmount(() => {
         <el-button link @click="discardCalendarDraft">清空草稿，另记一笔</el-button>
         <el-form-item label="农事作业类型">
           <el-select v-model="recordForm.record_type" style="width: 100%">
-            <el-option label="施肥作业 (追肥/水溶肥)" value="fertilization" />
-            <el-option label="植保打药 (防病/治虫)" value="pest_control" />
-            <el-option label="水分灌溉 (滴灌/微喷)" value="irrigation" />
-            <el-option label="整枝修剪 (抹杈/疏花)" value="field_management" />
-            <el-option label="田间除草" value="weeding" />
-            <el-option label="采收上市" value="harvesting" />
+            <el-option v-for="option in recordTypeOptions" :key="option.value" :label="option.label" :value="option.value" />
           </el-select>
         </el-form-item>
 
@@ -590,6 +596,7 @@ onBeforeUnmount(() => {
             type="date"
             placeholder="选择作业日期"
             value-format="YYYY-MM-DD"
+            :disabled-date="disableFutureDate"
             style="width: 100%"
           />
         </el-form-item>
@@ -603,18 +610,24 @@ onBeforeUnmount(() => {
           />
         </el-form-item>
 
-        <el-form-item v-if="recordForm.record_type === 'pest_control'" label="农药名称及安全间隔期(PHI)">
-          <div style="display: flex; gap: 10px; width: 100%">
-            <el-input v-model="recordForm.chemical_name" placeholder="农药通用名，如：苯醚甲环唑" />
+        <template v-if="recordKind(recordForm.record_type).key === 'spraying'">
+          <el-form-item label="农药名称（产品标签上的完整名称）">
+            <el-input v-model="recordForm.chemical_name" placeholder="例如：250克/升嘧菌酯悬浮剂" />
+          </el-form-item>
+          <el-form-item label="用量">
+            <el-input v-model="recordForm.dosage" placeholder="例如：40 ml/亩" />
+          </el-form-item>
+          <el-form-item label="安全间隔期（天，按产品标签填写）">
             <el-input-number
               v-model="recordForm.safety_interval_days"
               :min="0"
-              :max="60"
-              placeholder="PHI天数"
-              style="width: 160px"
+              :max="phiMax"
+              placeholder="未知可留空"
+              class="phi-input"
             />
-          </div>
-        </el-form-item>
+            <p class="app-note">不知道请留空，不要填 0；采收前核查会把未知间隔期当作风险提示。</p>
+          </el-form-item>
+        </template>
 
         <el-form-item label="作业人员">
           <el-input v-model="recordForm.operator" placeholder="例如：李农艺师" />
@@ -623,7 +636,7 @@ onBeforeUnmount(() => {
 
       <template #footer>
         <el-button @click="recordDialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="recordSaving" @click="submitRecord">保存农事记录</el-button>
+        <el-button type="primary" :loading="recordSaving" :disabled="recordSaving" @click="submitRecord">保存农事记录</el-button>
       </template>
     </el-dialog>
   </div>
@@ -774,11 +787,81 @@ onBeforeUnmount(() => {
 
 .status-danger {
   font-size: var(--app-text-xs);
-  color: var(--el-color-danger);
+  color: var(--state-warning);
   font-weight: 600;
   display: inline-flex;
   align-items: center;
   gap: 2px;
+}
+
+.status-pending {
+  font-size: var(--app-text-xs);
+  color: var(--state-info);
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+/* 上下文选择器：框内带"农场/田块/批次"前缀，未展开也能看出用途 */
+.ctx-select {
+  width: 260px;
+}
+
+.ctx-select--narrow {
+  width: 200px;
+}
+
+.ctx-prefix {
+  font-size: var(--app-text-xs);
+  color: var(--app-text-secondary);
+  padding-right: 6px;
+  margin-right: 2px;
+  border-right: 1px solid var(--app-border-light);
+  line-height: 1;
+}
+
+@media (max-width: 767px) {
+  .ctx-select,
+  .ctx-select--narrow {
+    width: 100%;
+  }
+}
+
+.phi-input {
+  width: min(200px, 100%);
+}
+
+/* 日历图例：履历实心、提醒空心（形状 + 颜色双编码，不只靠颜色） */
+.calendar-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--app-space-4);
+  margin-bottom: var(--app-space-2);
+  font-size: var(--app-text-xs);
+  color: var(--app-text-secondary);
+}
+
+.calendar-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--app-space-1);
+}
+
+.legend-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+.legend-dot.bg-record {
+  background: var(--app-text-placeholder);
+}
+
+.legend-dot--hollow.bg-plan {
+  background: transparent;
+  border: 2px solid var(--el-color-primary);
 }
 
 .task-p {
@@ -902,7 +985,8 @@ onBeforeUnmount(() => {
   }
 
   .cell-event-badge.bg-plan {
-    background: var(--el-color-primary);
+    background: transparent;
+    border: 2px solid var(--el-color-primary);
   }
 }
 </style>

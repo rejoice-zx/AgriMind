@@ -2,8 +2,9 @@
 import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Refresh, Download, Delete, Timer, Odometer } from '@element-plus/icons-vue'
-import * as echarts from 'echarts'
+import { echarts } from '@/composables/useChart'
 import PageHeader from '@/components/PageHeader.vue'
+import { errorText, isDismissed } from '@/utils/errorText'
 import {
   getPerformanceMetrics,
   clearPerformanceData,
@@ -48,8 +49,8 @@ let active = true
 // ECharts
 const barChartRef = ref<HTMLElement | null>(null)
 const successChartRef = ref<HTMLElement | null>(null)
-let barChartInstance: echarts.ECharts | null = null
-let successChartInstance: echarts.ECharts | null = null
+let barChartInstance: ReturnType<typeof echarts.init> | null = null
+let successChartInstance: ReturnType<typeof echarts.init> | null = null
 
 // Whether there is any metric data with actual calls
 const hasData = computed(() => Object.values(metrics.value).some(m => m.count > 0))
@@ -152,7 +153,7 @@ async function loadPerformanceData() {
     if (!active || revision !== loadRevision) return
     summary.value = null; metrics.value = {}; disposeCharts()
     loadFailed.value = true
-    ElMessage.error(error.response?.data?.detail || '加载性能数据失败')
+    ElMessage.error(errorText(error, '读取性能数据失败'))
   } finally {
     if (active && revision === loadRevision) loading.value = false
   }
@@ -179,58 +180,45 @@ function renderBarChart() {
   const p99Data = entries.map(([, m]) => +(m.p99Duration * 1000).toFixed(2))
   const axis = chartAxisStyle()
 
+  // 毫秒级数据库语句与秒级模型调用同框时，线性刻度会让小值不可见，跨度大时改用对数刻度
+  const positive = p99Data.filter(value => value > 0)
+  const useLog = positive.length > 1 && Math.max(...positive) / Math.min(...positive) > 100
+  const brand = cssVar('--el-color-primary')
   barChartInstance.setOption({
     tooltip: {
       trigger: 'axis',
       axisPointer: { type: 'shadow' },
-      formatter(params: any) {
-        let html = `<div style="font-weight:600;margin-bottom:4px">${params[0].axisValue}</div>`
-        for (const p of params) {
-          html += `<div>${p.marker} ${p.seriesName}: <b>${p.value}ms</b></div>`
-        }
-        return html
-      }
+      renderMode: 'richText',
+      backgroundColor: cssVar('--app-surface'),
+      borderColor: cssVar('--app-border'),
+      textStyle: { color: cssVar('--app-text') },
+      valueFormatter: (value: number) => `${value} 毫秒`
     },
     legend: {
       data: ['P50', 'P95', 'P99'],
       top: 0,
       textStyle: { color: cssVar('--app-text-secondary') }
     },
-    grid: { left: 50, right: 20, top: 40, bottom: 40 },
-    xAxis: {
+    grid: { left: 8, right: 24, top: 36, bottom: 36, containLabel: true },
+    yAxis: {
       type: 'category',
       data: categories,
+      inverse: true,
       ...axis,
-      axisLabel: { ...axis.axisLabel, interval: 0, rotate: entries.length > 5 ? 20 : 0 }
+      axisLabel: { ...axis.axisLabel, width: 120, overflow: 'truncate' }
     },
-    yAxis: {
-      type: 'value',
-      name: '耗时 (ms)',
+    xAxis: {
+      type: useLog ? 'log' : 'value',
       ...axis,
-      axisLabel: { ...axis.axisLabel, formatter: '{value}' }
+      name: useLog ? '毫秒（对数刻度）' : '毫秒',
+      nameLocation: 'middle',
+      nameGap: 26
     },
+    // 同一色相的深浅表示分位，不用红绿灯配色暗示"好坏"
     series: [
-      {
-        name: 'P50',
-        type: 'bar',
-        data: p50Data,
-        itemStyle: { color: cssVar('--el-color-success'), borderRadius: [3, 3, 0, 0] },
-        barMaxWidth: 36
-      },
-      {
-        name: 'P95',
-        type: 'bar',
-        data: p95Data,
-        itemStyle: { color: cssVar('--el-color-warning'), borderRadius: [3, 3, 0, 0] },
-        barMaxWidth: 36
-      },
-      {
-        name: 'P99',
-        type: 'bar',
-        data: p99Data,
-        itemStyle: { color: cssVar('--el-color-danger'), borderRadius: [3, 3, 0, 0] },
-        barMaxWidth: 36
-      }
+      { name: 'P50', type: 'bar', data: p50Data, itemStyle: { color: brand, opacity: 0.45 }, barMaxWidth: 14 },
+      { name: 'P95', type: 'bar', data: p95Data, itemStyle: { color: brand, opacity: 0.75 }, barMaxWidth: 14 },
+      { name: 'P99', type: 'bar', data: p99Data, itemStyle: { color: brand }, barMaxWidth: 14 }
     ]
   }, true)
 }
@@ -251,80 +239,30 @@ function renderSuccessChart() {
   }
 
   const categories = entries.map(([k]) => getMetricLabel(k))
-  const avgData = entries.map(([, m]) => +(m.avgDuration * 1000).toFixed(2))
   const countData = entries.map(([, m]) => m.count)
-  const successData = entries.map(([, m]) => m.successRate === null ? null : +(m.successRate * 100).toFixed(1))
   const axis = chartAxisStyle()
 
   successChartInstance.setOption({
     tooltip: {
       trigger: 'axis',
-      formatter(params: any) {
-        let html = `<div style="font-weight:600;margin-bottom:4px">${params[0].axisValue}</div>`
-        for (const p of params) {
-          const unit = p.seriesName === '完成比例' ? '%' : p.seriesName === '调用次数' ? '次' : 'ms'
-          html += `<div>${p.marker} ${p.seriesName}: <b>${p.value}${unit}</b></div>`
-        }
-        return html
-      }
+      axisPointer: { type: 'shadow' },
+      renderMode: 'richText',
+      backgroundColor: cssVar('--app-surface'),
+      borderColor: cssVar('--app-border'),
+      textStyle: { color: cssVar('--app-text') },
+      valueFormatter: (value: number) => `${value} 次`
     },
-    legend: {
-      data: ['平均耗时', '调用次数', '完成比例'],
-      top: 0,
-      textStyle: { color: cssVar('--app-text-secondary') }
-    },
-    grid: { left: 60, right: 60, top: 40, bottom: 40 },
-    xAxis: {
+    grid: { left: 8, right: 24, top: 16, bottom: 36, containLabel: true },
+    yAxis: {
       type: 'category',
       data: categories,
+      inverse: true,
       ...axis,
-      axisLabel: { ...axis.axisLabel, interval: 0, rotate: entries.length > 5 ? 20 : 0 }
+      axisLabel: { ...axis.axisLabel, width: 120, overflow: 'truncate' }
     },
-    yAxis: [
-      {
-        type: 'value',
-        name: '耗时 (ms) / 次数',
-        position: 'left',
-        ...axis
-      },
-      {
-        type: 'value',
-        name: '完成比例 (%)',
-        position: 'right',
-        min: 0,
-        max: 100,
-        ...axis,
-        splitLine: { show: false },
-        axisLabel: { ...axis.axisLabel, formatter: '{value}%' }
-      }
-    ],
+    xAxis: { type: 'value', minInterval: 1, min: 0, ...axis, name: '次', nameLocation: 'middle', nameGap: 26 },
     series: [
-      {
-        name: '平均耗时',
-        type: 'bar',
-        data: avgData,
-        itemStyle: { color: cssVar('--el-color-primary'), borderRadius: [3, 3, 0, 0] },
-        barMaxWidth: 30
-      },
-      {
-        name: '调用次数',
-        type: 'bar',
-        data: countData,
-        itemStyle: { color: cssVar('--el-color-warning'), borderRadius: [3, 3, 0, 0] },
-        barMaxWidth: 30
-      },
-      {
-        name: '完成比例',
-        type: 'line',
-        yAxisIndex: 1,
-        data: successData,
-        smooth: true,
-        symbol: 'circle',
-        symbolSize: 8,
-        lineStyle: { width: 2, color: cssVar('--el-color-success') },
-        itemStyle: { color: cssVar('--el-color-success') },
-        areaStyle: { color: cssVar('--el-color-success-light-8') }
-      }
+      { name: '最近样本数', type: 'bar', data: countData, itemStyle: { color: cssVar('--el-color-primary') }, barMaxWidth: 16 }
     ]
   }, true)
 }
@@ -352,6 +290,12 @@ function formatOutcomes(counts: Record<string, number>): string {
 function formatPercent(value: number | null): string {
   return value === null ? '无样本' : `${(value * 100).toFixed(1)}%`
 }
+// 完成比例标签：无样本显示灰色，不再落入"危险"红色
+function rateTag(value: number | null): 'success' | 'warning' | 'danger' | 'info' {
+  if (value === null || value === undefined) return 'info'
+  return value >= 0.95 ? 'success' : value >= 0.8 ? 'warning' : 'danger'
+}
+const SMALL_SAMPLE = 20
 function disposeCharts() {
   barChartInstance?.dispose(); successChartInstance?.dispose()
   barChartInstance = null; successChartInstance = null
@@ -361,17 +305,17 @@ function disposeCharts() {
 async function handleClear() {
   try {
     await ElMessageBox.confirm(
-      '清空当前后端进程的性能采样及累计计数？农业档案和业务统计会继续保留。',
-      '确认清空',
-      { type: 'warning' }
+      '将清空当前后端进程的全部性能采样和累计计数，清空后无法恢复。农业档案与业务数据不受影响。',
+      '清空性能采样',
+      { type: 'warning', confirmButtonText: '清空采样', cancelButtonText: '取消' }
     )
+  } catch (error) { if (isDismissed(error)) return; throw error }
+  try {
     await clearPerformanceData()
     ElMessage.success('已清空当前后端进程的性能采样')
     loadPerformanceData()
-  } catch (error: any) {
-    if (error !== 'cancel') {
-      ElMessage.error(error.response?.data?.detail || '清空失败')
-    }
+  } catch (error: unknown) {
+    ElMessage.error(errorText(error, '清空失败'))
   }
 }
 
@@ -386,10 +330,10 @@ async function handleExport() {
     link.href = url
     link.download = `performance_report_${new Date().toISOString().split('T')[0]}.txt`
     link.click()
-    URL.revokeObjectURL(url)
+    setTimeout(() => URL.revokeObjectURL(url), 1000)
     ElMessage.success('导出成功')
-  } catch (error: any) {
-    ElMessage.error(error.response?.data?.detail || '导出失败')
+  } catch (error: unknown) {
+    ElMessage.error(errorText(error, '导出失败'))
   }
 }
 
@@ -433,8 +377,19 @@ onBeforeUnmount(() => {
       </template>
     </PageHeader>
 
-    <el-alert v-if="loadFailed" class="page-alert" title="性能读取失败，未用旧采样或虚构成功率替代" type="error" :closable="false" />
-    <p class="page-hint">总体仅计算已采集农业HTTP请求的完整2xx响应比例（包含鉴权、参数拒绝）；工具和检索不重复累加到请求总数。明细取最近100条，P50/P95/P99采用最近秩法。工具完成比例仅表示执行正常返回，不代表外部数据可用。</p>
+    <el-alert v-if="loadFailed" class="page-alert" title="性能数据读取失败，未用旧数据或虚构比例替代" type="error" :closable="false" show-icon>
+      <el-button size="small" @click="loadPerformanceData">重试</el-button>
+    </el-alert>
+    <!-- 口径说明：与页内说明文字同级的小字，点开才展开，不占一整条折叠面板 -->
+    <details class="scope-note">
+      <summary>统计口径说明</summary>
+      <ul class="scope-list">
+          <li>"完整成功比例"只统计已采集的农业接口请求中正常返回（HTTP 2xx）的比例，包含被权限或参数校验拒绝的请求；不代表模型或诊断正确率。</li>
+          <li>工具和检索的耗时单独列出，不累加进请求总数；嵌套指标不能相加当作总耗时。</li>
+          <li>明细基于最近 100 条样本；P50/P95/P99 用最近秩法计算，样本少于 {{ SMALL_SAMPLE }} 条时标注"样本不足"，此时 P99 接近最大值。</li>
+          <li>数据只保存在当前后端进程内存中，重启后清零，多进程各自统计。</li>
+      </ul>
+    </details>
     <p v-if="summary?.clearedAt" class="page-hint">采样最近清空时间：{{ formatStartTime(summary.clearedAt) }}</p>
     <!-- Summary Cards -->
     <div v-loading="loading" class="summary-cards">
@@ -453,7 +408,7 @@ onBeforeUnmount(() => {
         </div>
         <div class="summary-content">
           <div class="summary-value">{{ summary?.totalRequests ?? '-' }}</div>
-          <div class="summary-label">已采集农业请求（累计）</div>
+          <div class="summary-label">已采集的农业接口请求（累计）</div>
         </div>
       </el-card>
       <el-card class="summary-card" shadow="never">
@@ -462,7 +417,7 @@ onBeforeUnmount(() => {
         </div>
         <div class="summary-content">
           <div class="summary-value">{{ summary ? formatPercent(summary.overallSuccessRate) : '-' }}</div>
-          <div class="summary-label">完整2xx响应比例</div>
+          <div class="summary-label">完整成功比例（HTTP 2xx）</div>
         </div>
       </el-card>
       <el-card class="summary-card" shadow="never">
@@ -477,7 +432,7 @@ onBeforeUnmount(() => {
     <div class="charts-row">
       <!-- Bar Chart: P50/P95/P99 -->
       <el-card class="chart-card" shadow="never">
-        <template #header><span>响应时间分布 (P50 / P95 / P99)</span></template>
+        <template #header><span>耗时分位（毫秒）</span></template>
         <div v-if="hasData" ref="barChartRef" class="chart-box" />
         <div v-else class="empty-box">
           <el-empty description="暂无性能数据" :image-size="60" />
@@ -485,7 +440,7 @@ onBeforeUnmount(() => {
       </el-card>
       <!-- Mixed Chart: avg + count + success rate -->
       <el-card class="chart-card" shadow="never">
-        <template #header><span>调用概览 (平均耗时 / 次数 / 完成比例)</span></template>
+        <template #header><span>最近样本数（次）</span></template>
         <div v-if="hasData" ref="successChartRef" class="chart-box" />
         <div v-else class="empty-box">
           <el-empty description="暂无性能数据" :image-size="60" />
@@ -494,20 +449,25 @@ onBeforeUnmount(() => {
     </div>
 
     <el-alert v-if="summary" class="page-alert" :title="`后端进程 ${summary.processId ?? '未返回'}；检测到模型降级的完整2xx请求 ${summary.degradedRequests ?? '未返回'} 次（累计）`" type="info" :closable="false" />
-    <p class="page-hint">HTTP完成与模型降级分开计数。数据库仅计农业请求中的语句执行，不含连接池等待、提交或应用处理；模型HTTP为缓冲响应等待。嵌套指标不可相加作为总请求耗时。</p>
+
 
     <!-- Metrics Table -->
     <el-card class="table-card" shadow="never">
       <template #header><span>详细指标</span></template>
       <el-table :data="Object.entries(metrics).filter(([, value]) => value.count > 0).map(([k, v]) => ({ key: k, ...v }))" stripe>
-        <el-table-column label="指标" width="150">
+        <el-table-column label="指标" width="160" fixed="left">
           <template #default="{ row }">{{ getMetricLabel(row.key) }}</template>
         </el-table-column>
-        <el-table-column prop="count" label="最近样本" width="100" align="right" />
+        <el-table-column label="最近样本" width="110" align="right">
+          <template #default="{ row }">
+            <span class="app-num">{{ row.count }}</span>
+            <el-tag v-if="row.count < SMALL_SAMPLE" size="small" type="info" effect="plain" class="sample-tag">样本不足</el-tag>
+          </template>
+        </el-table-column>
         <el-table-column prop="totalCount" label="累计调用" width="100" align="right" />
         <el-table-column label="完成比例" width="100" align="right">
           <template #default="{ row }">
-            <el-tag :type="row.successRate >= 0.95 ? 'success' : row.successRate >= 0.8 ? 'warning' : 'danger'" size="small">
+            <el-tag :type="rateTag(row.successRate)" size="small">
               {{ formatPercent(row.successRate) }}
             </el-tag>
           </template>
@@ -525,10 +485,10 @@ onBeforeUnmount(() => {
           <template #default="{ row }">{{ formatDuration(row.p50Duration) }}</template>
         </el-table-column>
         <el-table-column label="P95" width="100" align="right">
-          <template #default="{ row }"><span class="warning-text">{{ formatDuration(row.p95Duration) }}</span></template>
+          <template #default="{ row }">{{ formatDuration(row.p95Duration) }}</template>
         </el-table-column>
         <el-table-column label="P99" width="100" align="right">
-          <template #default="{ row }"><span class="danger-text">{{ formatDuration(row.p99Duration) }}</span></template>
+          <template #default="{ row }">{{ formatDuration(row.p99Duration) }}</template>
         </el-table-column>
         <el-table-column label="最小/最大" min-width="150">
           <template #default="{ row }">{{ formatDuration(row.minDuration) }} / {{ formatDuration(row.maxDuration) }}</template>
@@ -635,7 +595,55 @@ onBeforeUnmount(() => {
 .warning-text { color: var(--el-color-warning); }
 .danger-text { color: var(--el-color-danger); }
 
-@media (max-width: 960px) {
+.scope-note {
+  margin: calc(-1 * var(--app-space-2)) 0 var(--app-space-3);
+  font-size: var(--app-text-xs);
+  color: var(--app-text-secondary);
+}
+
+.scope-note summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 24px;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+
+.scope-note summary::-webkit-details-marker {
+  display: none;
+}
+
+.scope-note summary::before {
+  content: '';
+  width: 0;
+  height: 0;
+  border-left: 4px solid currentColor;
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  transition: transform var(--app-duration-fast, 0.15s);
+}
+
+.scope-note[open] summary::before {
+  transform: rotate(90deg);
+}
+
+.scope-note summary:hover {
+  color: var(--app-text);
+}
+
+.scope-list {
+  margin: var(--app-space-1) 0 0;
+  padding-left: 1.4em;
+  line-height: 1.7;
+}
+
+.sample-tag {
+  margin-left: 4px;
+}
+
+@media (max-width: 1023px) {
   .charts-row { grid-template-columns: 1fr; }
 }
 

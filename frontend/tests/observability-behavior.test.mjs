@@ -6,6 +6,7 @@ import { Script, createContext } from 'node:vm'
 const require = createRequire(new URL('../package.json', import.meta.url))
 const { parse, compileScript } = require('@vue/compiler-sfc')
 const ts = require('typescript'), vue = require('vue')
+import { sharedModule } from './shared-modules.mjs'
 function harness(name, api) {
   const { descriptor } = parse(readFileSync(new URL(`../src/views/${name}.vue`, import.meta.url), 'utf8'))
   const javascript = ts.transpileModule(compileScript(descriptor, { id: name }).content,
@@ -17,15 +18,32 @@ function harness(name, api) {
     echarts: { init: () => { const chart = { options: [], disposed: false,
       setOption(value) { this.options.push(value) }, clear() { this.options = [] }, resize() {}, dispose() { this.disposed = true } }
       charts.push(chart); return chart } },
-    'element-plus': { ElMessage: { error: value => errors.push(value), success() {} }, ElMessageBox: { confirm: async () => true } },
-    '@element-plus/icons-vue': {}, '@/api/statistics': api, '@/api/performance': api,
   }
+  // 与真实 useChart 行为一致：容器存在才创建实例，卸载时销毁
+  dependencies['@/composables/useChart'] = {
+    echarts: dependencies.echarts,
+    chartTheme: () => ({ palette: [], textSecondary: '#64748b' }),
+    axisStyle: () => ({}), baseOption: () => ({ tooltip: {} }),
+    useChart(container, build) {
+      let instance = null
+      const ensure = () => { if (!container.value) return null; instance ||= dependencies.echarts.init(container.value); return instance }
+      const dispose = () => { instance?.dispose(); instance = null }
+      hooks.dispose.push(dispose)
+      return { render() { const chart = ensure(); if (!chart) return; const option = build({ palette: [] }); option ? chart.setOption(option, true) : chart.clear() },
+        clear() { instance?.clear() }, dispose, get instance() { return instance } }
+    },
+  }
+  Object.assign(dependencies, {
+'element-plus': { ElMessage: { error: value => errors.push(value), success() {} }, ElMessageBox: { confirm: async () => true } },
+    '@element-plus/icons-vue': {}, '@/api/statistics': api, '@/api/performance': api,
+  })
   new Script(javascript).runInContext(createContext({ module, exports: module.exports, console, Blob,
     getComputedStyle: () => ({ getPropertyValue: () => '#64748b' }),
     window: { addEventListener() {}, removeEventListener() {} },
     URL: { createObjectURL: () => 'fixture-download', revokeObjectURL() {} },
     document: { documentElement: {}, createElement: () => ({ click() { downloads.push({ href: this.href, name: this.download }) } }) },
-    require: name => { if (!(name in dependencies)) throw Error(`Unexpected dependency ${name}`); return dependencies[name] },
+    setTimeout: fn => fn(),
+    require: name => { if (name in dependencies) return dependencies[name]; const shared = sharedModule(name); if (shared) return shared; throw Error(`Unexpected dependency ${name}`) },
   }))
   return { state: module.exports.default.setup({}, { expose() {} }), hooks, errors, charts, downloads }
 }
@@ -158,4 +176,11 @@ test('performance does not manufacture zero degradation or a process id when fie
   await state.loadPerformanceData()
   assert.equal(state.summary.value.degradedRequests, null)
   assert.equal(state.summary.value.processId, null)
+})
+test('performance tags metrics without samples as neutral instead of failing', () => {
+  const { state } = harness('Performance', { getPerformanceMetrics: async () => ({ data: {} }) })
+  assert.equal(state.rateTag(null), 'info')
+  assert.equal(state.rateTag(0), 'danger')
+  assert.equal(state.rateTag(0.97), 'success')
+  assert.equal(state.formatPercent(null), '无样本')
 })

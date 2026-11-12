@@ -6,22 +6,24 @@ import { Script, createContext } from 'node:vm'
 const require = createRequire(new URL('../package.json', import.meta.url))
 const { parse, compileScript } = require('@vue/compiler-sfc')
 const ts = require('typescript'), vue = require('vue')
+import { sharedModule } from './shared-modules.mjs'
 function harness(api) {
   const { descriptor } = parse(readFileSync(new URL('../src/views/Logs.vue', import.meta.url), 'utf8'))
   const compiled = ts.transpileModule(compileScript(descriptor, { id: 'log-query' }).content,
     { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText
-  const module = { exports: {} }, hooks = { dispose: [] }, errors = [], success = []
+  const module = { exports: {} }, hooks = { dispose: [] }, errors = [], success = [], prompts = []
   const dependencies = {
     '@/components/PageHeader.vue': {},
     vue: { ...vue, onMounted() {}, onBeforeUnmount: fn => hooks.dispose.push(fn) },
-    'element-plus': { ElMessage: { error: value => errors.push(value), success: value => success.push(value) },
-      ElMessageBox: { confirm: async () => true } },
+    'element-plus': { ElMessage: { error: value => errors.push(value), success: value => success.push(value), warning() {} },
+      ElMessageBox: { confirm: async () => true, prompt: async (message, title, options) => { prompts.push(options); return { value: '清空' } } } },
     '@element-plus/icons-vue': {}, '@/api/logs': api,
   }
   new Script(compiled).runInContext(createContext({ module, exports: module.exports, console, Blob, URL,
-    require: name => { if (!(name in dependencies)) throw Error(`Unexpected dependency ${name}`); return dependencies[name] },
+    setTimeout: fn => fn(),
+    require: name => { if (name in dependencies) return dependencies[name]; const shared = sharedModule(name); if (shared) return shared; throw Error(`Unexpected dependency ${name}`) },
   }))
-  return { state: module.exports.default.setup({}, { expose() {} }), hooks, errors, success }
+  return { state: module.exports.default.setup({}, { expose() {} }), hooks, errors, success, prompts }
 }
 function result(message, truncated = false) {
   return { data: { items: [{ timestamp: '2026-10-10T00:00:00Z', level: 'INFO', message,
@@ -81,4 +83,32 @@ test('oversized download explains the limit even when the HTTP error body is a b
   await state.handleDownload('app')
   assert.equal(errors.length, 1)
   assert.ok(errors[0].includes('8MiB'))
+})
+test('malformed association ids are rejected before a request is sent', async () => {
+  const calls = []
+  const { state } = harness({ getLogs: async params => { calls.push(params); return result('x') } })
+  state.filters.associationType = 'field_id'; state.filters.associationId = 'abc'
+  assert.equal(state.associationError.value, '应为正整数')
+  await state.loadLogs(); assert.equal(calls.length, 0)
+  state.filters.associationType = 'request_id'; state.filters.associationId = '3f2a6c1e-0000-4000-8000-1234567890ab'
+  state.filters.keyword = '  timeout  '
+  await state.loadLogs()
+  assert.equal(calls.length, 1); assert.equal(calls[0].keyword, 'timeout')
+})
+test('clicking a context id filters by it and clear requires typing the confirmation word', async () => {
+  const calls = []
+  const { state, prompts } = harness({ getLogs: async params => { calls.push(params); return result('x') },
+    clearLogs: async () => ({ data: { success: true } }) })
+  state.filterByContext('field_id', 7)
+  await new Promise(r => setImmediate(r))
+  assert.equal(calls.at(-1).field_id, '7'); assert.equal(state.currentPage.value, 1)
+  await state.handleClear('error')
+  assert.equal(prompts[0].inputValidator('随便'), '请输入“清空”')
+  assert.equal(prompts[0].inputValidator('清空'), true)
+})
+test('query limitations are merged into one list of only the conditions that occurred', async () => {
+  const { state } = harness({ getLogs: async () => result('x', true) })
+  await state.loadLogs()
+  assert.equal(state.queryWarnings.value.length, 2)
+  assert.ok(state.queryWarnings.value[1].includes('2 条旧格式'))
 })

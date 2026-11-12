@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { Script, createContext } from 'node:vm'
+import { sharedModule } from './shared-modules.mjs'
 const require = createRequire(new URL('../package.json', import.meta.url))
 const vue = require('vue'), ts = require('typescript')
 const { parse, compileScript } = require('@vue/compiler-sfc')
@@ -31,6 +32,7 @@ function harness(view, api, history = {}, memory = new Map()) {
       saveScopedDraft(owner, key, value) { if (value) memory.set(`${owner}:${key}`, JSON.parse(JSON.stringify(value))); else memory.delete(`${owner}:${key}`); return true },
       readScopedDraft: (owner, key) => memory.get(`${owner}:${key}`)
     }
+    const shared = sharedModule(name); if (shared) return shared
     if (name.startsWith('@/components/') || name === '@element-plus/icons-vue') return {}
     throw Error(name)
   } }))

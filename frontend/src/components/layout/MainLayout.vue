@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import {
@@ -12,21 +12,34 @@ import {
 import { useAuthStore } from '@/stores/auth'
 import { useSettingsStore } from '@/stores/settings'
 import { getMenuItems, type MenuItem } from '@/router'
+import { roleLabel } from '@/constants/agri'
 
 const router = useRouter()
 const route = useRoute()
 const authStore = useAuthStore()
 const settingsStore = useSettingsStore()
 
-// Sidebar state
-const isCollapsed = ref(false)
+// Sidebar state：桌面端折叠状态记在 settings store（刷新后保留）；窄于 lg 时强制折叠，宽于 xl 恢复用户选择
+const COLLAPSE_BELOW = 1280
+const MOBILE_BELOW = 768
+const isCollapsed = ref(settingsStore.sidebarCollapsed)
 const isMobile = ref(false)
 const mobileDrawerVisible = ref(false)
+let forcedCollapse = false
 
-// Get menu items based on user role
+// Get menu items based on user role, grouped: 农场工作 / 系统管理
 const menuItems = computed<MenuItem[]>(() => {
   return getMenuItems(authStore.userRole)
 })
+const menuGroups = computed(() => {
+  const groups = [
+    { key: 'farm', title: '农场工作', items: menuItems.value.filter(item => item.group !== 'system') },
+    { key: 'system', title: '系统管理', items: menuItems.value.filter(item => item.group === 'system') },
+  ]
+  return groups.filter(group => group.items.length)
+})
+const roleText = computed(() => roleLabel(authStore.userRole))
+const roleTagType = computed(() => authStore.isAdmin ? 'danger' : authStore.userRole === 'expert' ? 'success' : 'info')
 
 // Current active menu
 const activeMenu = computed(() => route.path)
@@ -45,6 +58,8 @@ function toggleSidebar() {
     mobileDrawerVisible.value = !mobileDrawerVisible.value
   } else {
     isCollapsed.value = !isCollapsed.value
+    forcedCollapse = false
+    settingsStore.setSidebarCollapsed(isCollapsed.value)
   }
 }
 
@@ -79,12 +94,21 @@ function handleLogout() {
   ElMessage.success('已退出登录')
 }
 
-// Check screen size for responsive layout
+// Check screen size for responsive layout: only react when a breakpoint is crossed,
+// so the user's own collapse choice survives ordinary resizes.
+let lastBand = ''
 function checkScreenSize() {
   const w = window.innerWidth
-  isMobile.value = w < 768
-  if (w < 1100) {
+  const band = w < MOBILE_BELOW ? 'mobile' : w < COLLAPSE_BELOW ? 'narrow' : 'wide'
+  if (band === lastBand) return
+  lastBand = band
+  isMobile.value = band === 'mobile'
+  if (band === 'narrow') {
+    forcedCollapse = !isCollapsed.value
     isCollapsed.value = true
+  } else if (band === 'wide' && forcedCollapse) {
+    isCollapsed.value = settingsStore.sidebarCollapsed
+    forcedCollapse = false
   }
 }
 
@@ -95,6 +119,7 @@ onMounted(() => {
   // Apply saved theme
   applyTheme(settingsStore.theme)
 })
+onBeforeUnmount(() => window.removeEventListener('resize', checkScreenSize))
 
 // Watch for route changes to close mobile drawer
 watch(() => route.path, () => {
@@ -118,7 +143,7 @@ watch(() => route.path, () => {
           <span
             v-show="!isCollapsed"
             class="logo-text"
-          >AgriMind 智慧农业</span>
+          >AgriMind 农业协作</span>
         </div>
       </div>
       
@@ -129,18 +154,22 @@ watch(() => route.path, () => {
         class="sidebar-menu"
         @select="handleMenuSelect"
       >
-        <el-menu-item
-          v-for="item in menuItems"
-          :key="item.path"
-          :index="item.path"
-        >
-          <el-icon v-if="item.icon">
-            <component :is="item.icon" />
-          </el-icon>
-          <template #title>
-            {{ item.title }}
-          </template>
-        </el-menu-item>
+        <template v-for="group in menuGroups" :key="group.key">
+          <div v-if="menuGroups.length > 1 && !isCollapsed" class="menu-group-title">{{ group.title }}</div>
+          <div v-else-if="menuGroups.length > 1 && group.key === 'system'" class="menu-group-divider" role="separator" />
+          <el-menu-item
+            v-for="item in group.items"
+            :key="item.path"
+            :index="item.path"
+          >
+            <el-icon v-if="item.icon">
+              <component :is="item.icon" />
+            </el-icon>
+            <template #title>
+              {{ item.title }}
+            </template>
+          </el-menu-item>
+        </template>
       </el-menu>
     </aside>
 
@@ -156,7 +185,7 @@ watch(() => route.path, () => {
       <div class="sidebar-header">
         <div class="logo-container">
           <img src="/favicon.svg" alt="logo" class="logo-icon" style="width: 28px; height: 28px;" />
-          <span class="logo-text">AgriMind 智慧农业</span>
+          <span class="logo-text">AgriMind 农业协作</span>
         </div>
       </div>
       
@@ -165,18 +194,22 @@ watch(() => route.path, () => {
         class="sidebar-menu"
         @select="handleMenuSelect"
       >
-        <el-menu-item
-          v-for="item in menuItems"
-          :key="item.path"
-          :index="item.path"
-        >
-          <el-icon v-if="item.icon">
-            <component :is="item.icon" />
-          </el-icon>
-          <template #title>
-            {{ item.title }}
-          </template>
-        </el-menu-item>
+        <template v-for="group in menuGroups" :key="group.key">
+          <div v-if="menuGroups.length > 1" class="menu-group-title">{{ group.title }}</div>
+          <div v-else-if="menuGroups.length > 1 && group.key === 'system'" class="menu-group-divider" role="separator" />
+          <el-menu-item
+            v-for="item in group.items"
+            :key="item.path"
+            :index="item.path"
+          >
+            <el-icon v-if="item.icon">
+              <component :is="item.icon" />
+            </el-icon>
+            <template #title>
+              {{ item.title }}
+            </template>
+          </el-menu-item>
+        </template>
       </el-menu>
     </el-drawer>
 
@@ -191,6 +224,7 @@ watch(() => route.path, () => {
           <el-button
             class="toggle-btn"
             :icon="isCollapsed || isMobile ? Expand : Fold"
+            :aria-label="isMobile ? '打开导航菜单' : (isCollapsed ? '展开侧栏' : '收起侧栏')"
             @click="toggleSidebar"
           />
           <span class="page-title">{{ route.meta.title || '首页' }}</span>
@@ -202,6 +236,7 @@ watch(() => route.path, () => {
             <el-button
               class="theme-btn"
               :icon="isDarkTheme ? Sunny : Moon"
+              :aria-label="isDarkTheme ? '切换亮色主题' : '切换暗色主题'"
               @click="toggleTheme"
             />
           </el-tooltip>
@@ -211,7 +246,7 @@ watch(() => route.path, () => {
             trigger="click"
             @command="handleLogout"
           >
-            <div class="user-info">
+            <div class="user-info" role="button" tabindex="0" :aria-label="`当前用户 ${userDisplayName}，${roleText}，打开账号菜单`">
               <el-avatar
                 :size="32"
                 class="user-avatar"
@@ -221,9 +256,10 @@ watch(() => route.path, () => {
               <span class="user-name">{{ userDisplayName }}</span>
               <el-tag
                 size="small"
-                :type="authStore.isAdmin ? 'danger' : (authStore.userRole === 'expert' ? 'success' : 'info')"
+                :type="roleTagType"
+                class="role-tag"
               >
-                {{ authStore.isAdmin ? '管理员' : (authStore.userRole === 'expert' ? '农技专家' : (authStore.userRole === 'cs' ? '客服' : '农户')) }}
+                {{ roleText }}
               </el-tag>
             </div>
             <template #dropdown>
@@ -330,6 +366,20 @@ watch(() => route.path, () => {
   background-color: var(--el-color-primary-light-9);
   color: var(--el-color-primary);
   font-weight: 600;
+}
+
+.menu-group-title {
+  padding: var(--app-space-3) var(--app-space-5) var(--app-space-1);
+  font-size: var(--app-text-xs);
+  font-weight: 500;
+  color: var(--app-text-placeholder);
+  letter-spacing: 0.04em;
+}
+
+.menu-group-divider {
+  height: 1px;
+  margin: var(--app-space-2) var(--app-space-3);
+  background: var(--app-border-light);
 }
 
 .sidebar-menu:not(.el-menu--collapse) {
@@ -443,7 +493,7 @@ watch(() => route.path, () => {
 }
 
 .user-avatar {
-  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  background: var(--el-color-primary);
   color: #ffffff;
   font-weight: 600;
 }
@@ -484,7 +534,8 @@ watch(() => route.path, () => {
     max-width: 100% !important;
   }
 
-  .user-name {
+  .user-name,
+  .role-tag {
     display: none;
   }
 

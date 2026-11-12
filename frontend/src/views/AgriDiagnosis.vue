@@ -1,5 +1,8 @@
 <script setup lang="ts">
 import AuthenticatedImage from '@/components/AuthenticatedImage.vue'
+import SourceBadge from '@/components/common/SourceBadge.vue'
+import { ticketStatus, recordKind } from '@/constants/agri'
+import { errorText } from '@/utils/errorText'
 import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useFarmSelectionStore } from '@/stores/farmSelection'
@@ -50,7 +53,8 @@ import type {
 // 当前激活的标签页
 const auth = useAuthStore()
 const canReview = computed(() => ['admin', 'expert'].includes(auth.user?.role || ''))
-const activeTab = ref<'farmer' | 'expert'>('farmer')
+// 专家登录后首先需要处理工单，默认打开会诊工作台；管理员与农户默认打开初诊。
+const activeTab = ref<'farmer' | 'expert'>(auth.user?.role === 'expert' ? 'expert' : 'farmer')
 const workbenchType = ref<'disease' | 'consultation'>('disease')
 const consultationBusy = ref(false)
 
@@ -78,9 +82,8 @@ function acceptDiagnosis(result: VisualDiagnosisResponse, key: string) {
     ElMessage.error(result.error_message || result.advice)
     return
   }
-  ElMessage.success(result.replayed ? '已恢复原诊断结果，未重新调用模型' : '初诊分析已保存')
-  if (result.ticket_id != null) ElMessage.warning('需要专家复核，已为您自动转接农技专家复核工单！')
-  else if (result.need_expert) ElMessage.warning('建议农技专家复核，本次未创建专家工单，请查看诊断建议。')
+  if (result.ticket_id != null) ElMessage.success(`初诊已保存，并已转交农技专家（工单 #${result.ticket_id}）`)
+  else ElMessage.success(result.replayed ? '已恢复原诊断结果，未重新调用模型' : '初诊分析已保存')
 }
 async function queryDiagnosisStatus(cancel = false) {
   const pending = pendingDiagnosis.value
@@ -179,12 +182,12 @@ watch(() => draftOwnerKey(auth.user), () => {
 // 预设快速测试病斑特征参考
 const sampleImages = [
   {
-    name: '番茄晚疫病 (典型特征)',
+    name: '示例：叶缘水浸状病斑',
     symptoms: '叶片边缘水浸状暗褐色病斑，清晨棚内湿度大时病健交界处长出白色稀疏霉层',
     crop: '番茄'
   },
   {
-    name: '番茄早期疑似斑 (低置信度需专家介入)',
+    name: '示例：老叶黄褐色小斑点',
     symptoms: '下部老叶散发不规则黄褐色微小点，轮纹微弱，疑似早疫病或缺素症',
     crop: '番茄'
   }
@@ -259,9 +262,20 @@ function selectSampleImage(sample: typeof sampleImages[0]) {
   if (diagLoading.value) return
   diagSymptoms.value = sample.symptoms
   diagCrop.value = sample.crop
-  ElMessage.info(`已填入典型特征：${sample.name}，请拍摄或上传现场真实病叶照片`)
+  ElMessage.info('已填入示例症状描述，请按实际情况修改，并上传现场真实照片')
 }
 
+
+const MAX_IMAGE_BYTES = 10 * 1024 * 1024
+function beforeImageUpload(file: File) {
+  if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+    ElMessage.warning('请选择 JPG、PNG 或 WEBP 格式的照片'); return false
+  }
+  if (file.size > MAX_IMAGE_BYTES) {
+    ElMessage.warning('照片超过 10MB，请压缩或重新拍摄后再上传'); return false
+  }
+  return true
+}
 
 async function handleCustomUpload(options: any) {
   if (uploading.value || diagLoading.value) return
@@ -273,9 +287,17 @@ async function handleCustomUpload(options: any) {
     newDiagnosis()
     ElMessage.success('病叶现场照片上传成功')
   } catch (err: any) {
-    ElMessage.error('图片上传失败: ' + (err.response?.data?.detail || err.message))
-  } finally { uploading.value = false }
+    if (alive) ElMessage.error(errorText(err, '图片上传失败，请检查网络后重试'))
+  } finally { if (alive) uploading.value = false }
 }
+
+// 农户端流程进度：拍照 → 初诊 → 转专家 → 专家复核
+const farmerStep = computed(() => {
+  if (!uploadedImageUrl.value) return 0
+  if (!diagResult.value) return 1
+  if (diagResult.value.ticket_id != null) return 3
+  return 2
+})
 
 async function startVisualDiagnosis() {
   if (diagLoading.value || uploading.value || queryingDiagnosis.value || plantingsLoading.value) return
@@ -311,6 +333,10 @@ async function startVisualDiagnosis() {
 
 // ==================== 专家端操作 ====================
 
+function changeTicketFilter() {
+  ticketPage.value = 1
+  fetchTickets()
+}
 async function fetchTickets() {
   if (!canReview.value) return
   const version = ++listVersion
@@ -365,7 +391,7 @@ async function handleClaimTicket() {
     await selectTicket(id, true)
     await fetchTickets()
   } catch (err: any) {
-    if (alive) { ElMessage.error('认领工单失败: ' + (err.response?.data?.detail || err.message)); await selectTicket(id, true) }
+    if (alive) { ElMessage.error(errorText(err, '认领工单失败，可能已被其他专家认领')); await selectTicket(id, true) }
   } finally { claiming.value = false }
 }
 async function submitExpertResolve() {
@@ -375,33 +401,27 @@ async function submitExpertResolve() {
     return
   }
   const id = selectedTicketId.value
+  try {
+    await ElMessageBox.confirm(
+      `复核结论"${resolveForm.value.confirmed_disease.trim()}"提交后将归档并通知农户，不能再修改。` +
+      (resolveForm.value.is_knowledge_candidate ? '你勾选了提交为知识候选：它会以"未核验"状态进入知识库，管理员审核前不参与检索。' : ''),
+      '确认提交专家复核', { type: 'warning', confirmButtonText: '确认提交', cancelButtonText: '再检查一下' })
+  } catch { return }
+  if (!alive || id !== selectedTicketId.value || !canSubmit.value || submittingResolve.value) return
   submittingResolve.value = true
   try {
     const res = await resolveExpertTicket(id, { ...resolveForm.value })
     if (!alive) return
-    ElMessageBox.alert(res.data.feedback_message, '专家复核已保存', { type: 'success', confirmButtonText: '确定' })
+    ElMessage.success(res.data.feedback_message || '专家复核已保存')
     historyVersion.value++
     await selectTicket(id, true)
     await fetchTickets()
   } catch (err: any) {
-    if (alive) ElMessage.error('提交复核失败: ' + (err.response?.data?.detail || err.message))
+    if (alive) ElMessage.error(errorText(err, '提交复核失败，请稍后重试'))
   } finally { submittingResolve.value = false }
 }
 
-function formatTicketStatus(status: string) {
-  switch (status) {
-    case 'preliminary':
-      return { label: '初步记录', tag: 'info' }
-    case 'pending_review':
-      return { label: '待专家接单', tag: 'danger' }
-    case 'in_review':
-      return { label: '专家审阅中', tag: 'warning' }
-    case 'expert_reviewed':
-      return { label: '已确诊出方', tag: 'success' }
-    default:
-      return { label: status, tag: 'info' }
-  }
-}
+const formatTicketStatus = ticketStatus
 
 onBeforeUnmount(() => { alive = false; ++listVersion; ++detailVersion })
 onMounted(() => {
@@ -414,37 +434,49 @@ onMounted(() => {
   <div class="app-page agri-diagnosis-page">
     <!-- 顶部导航 Tabs -->
     <div class="app-card header-card">
-      <div class="tabs-control">
-        <div
+      <div class="tabs-control" role="tablist" aria-label="初诊与会诊">
+        <button
+          type="button"
+          role="tab"
           class="tab-btn"
           :class="{ active: activeTab === 'farmer' }"
+          :aria-selected="activeTab === 'farmer'"
           @click="activeTab = 'farmer'"
         >
           <el-icon><Picture /></el-icon>
-          <span>农户端 · 病叶图像智能初诊</span>
-        </div>
-        <div
+          <span>病叶图像初诊</span>
+        </button>
+        <button
+          v-if="canReview"
+          type="button"
+          role="tab"
           class="tab-btn"
           :class="{ active: activeTab === 'expert' }"
-          v-if="canReview"
+          :aria-selected="activeTab === 'expert'"
           @click="activeTab = 'expert'"
         >
           <el-icon><Service /></el-icon>
-          <span>专家端 · 农技专家会诊工作台</span>
-          <el-badge :value="tickets.filter(t => t.status === 'pending_review').length" :max="99" class="tab-badge" />
-        </div>
+          <span>专家会诊工作台</span>
+          <el-badge v-if="ticketFilterStatus === 'pending_review' && ticketTotal" :value="ticketTotal" :max="99" class="tab-badge" />
+        </button>
       </div>
       <div class="tab-desc">
         <span v-if="activeTab === 'farmer'">
-          <el-icon><Camera /></el-icon> 拍摄或上传农作物发病叶片照片，AgriMind 多模态视觉模型将实时解析病斑特征；关联田块后，低置信度结果可自动派单给农技专家。
+          <el-icon><Camera /></el-icon> 上传现场病叶照片，视觉模型会描述可观察到的特征并给出疑似方向。这是初步参考，不是确诊；关联田块后可以转交农技专家复核。
         </span>
         <span v-else>
-          <el-icon><Avatar /></el-icon> 农技专家协同复核工作台，整合现场病叶图像、田块土壤、时空微气象与用药历史；复核归档可选择保存为 L4 专家案例。
+          <el-icon><Avatar /></el-icon> 认领工单后查看照片、田块档案、天气快照与近期农事，再给出复核结论。勾选"知识候选"的案例需管理员审核后才进入检索。
         </span>
       </div>
     </div>
 
     <!-- ==================== TAB 1: 农户端智能初诊 ==================== -->
+    <el-steps v-if="activeTab === 'farmer'" :active="farmerStep" finish-status="success" simple class="farmer-steps" aria-label="初诊流程">
+      <el-step title="上传照片" />
+      <el-step title="模型初诊" />
+      <el-step title="转交专家" />
+      <el-step title="专家复核" />
+    </el-steps>
     <div v-if="activeTab === 'farmer'" class="farmer-view-layout">
       <!-- 左侧：图像上传与表单 -->
       <div class="app-card farmer-input-card">
@@ -456,6 +488,8 @@ onMounted(() => {
           drag
           action="#"
           :http-request="handleCustomUpload"
+          :before-upload="beforeImageUpload"
+          accept="image/jpeg,image/png,image/webp"
           :show-file-list="false"
           :disabled="diagLoading || uploading"
         >
@@ -466,17 +500,23 @@ onMounted(() => {
           <div v-else class="upload-placeholder">
             <el-icon class="el-icon--upload"><UploadFilled /></el-icon>
             <div class="el-upload__text">
-              拖拽病叶照片到此处，或 <em>点击上传</em>
+              拖拽病叶照片到此处，或 <em>点击拍照 / 选择照片</em>
             </div>
             <div class="el-upload__tip">
-              支持 JPG / PNG / WEBP 格式照片，建议正对病斑特写
+              JPG / PNG / WEBP，不超过 10MB
             </div>
           </div>
         </el-upload>
 
-        <!-- 预设示例快速测试按钮 -->
+        <ul class="photo-guide" aria-label="拍照建议">
+          <li>自然光下拍摄，避免强光直射和闪光灯</li>
+          <li>病斑对焦清晰，占画面一半以上</li>
+          <li>尽量补充整株、叶背和发病部位多张照片（可在症状里说明发病比例）</li>
+        </ul>
+
+        <!-- 示例症状描述（仅填入文字，结果由真实照片决定） -->
         <div class="sample-actions">
-          <span class="sample-label">快速填入典型特征：</span>
+          <span class="sample-label">症状描述示例：</span>
           <div class="sample-chips">
 
             <el-button
@@ -511,18 +551,22 @@ onMounted(() => {
             </el-select>
           </el-form-item>
           <el-form-item label="农作物种类">
-            <el-button link @click="restoreDiagnosisDraft">恢复本机草稿 / 原提交编号</el-button>
-            <span v-if="diagnosisDraftNotice">{{ diagnosisDraftNotice }}</span>
             <el-input v-model="diagCrop" placeholder="例如：番茄" />
           </el-form-item>
-          <el-form-item label="田间表观症状描述（可选辅助）">
+          <el-form-item label="症状描述（建议填写）">
             <el-input
               v-model="diagSymptoms"
               type="textarea"
               :rows="3"
-              placeholder="例如：叶缘水浸状暗绿斑，叶背有稀疏白色霜霉，有枯死迹象"
+              maxlength="500"
+              show-word-limit
+              placeholder="发病部位、颜色形状、大约多少比例的植株受害、最近几天天气与管理措施"
             />
           </el-form-item>
+          <div class="draft-row">
+            <el-button link @click="restoreDiagnosisDraft">恢复本机草稿 / 原提交编号</el-button>
+            <span v-if="diagnosisDraftNotice" class="form-tip">{{ diagnosisDraftNotice }}</span>
+          </div>
           <el-button
             type="primary"
             size="large"
@@ -533,8 +577,8 @@ onMounted(() => {
             {{ pendingDiagnosis ? '提交／恢复同一诊断' : '开始图像初诊' }}
           </el-button>
         </el-form>
-        <div v-if="pendingDiagnosis" style="margin-top: 12px">
-          <p>断网或关闭页面后继续分析到处理时限；恢复草稿后查询原结果。主动取消会保存失败回执。</p>
+        <div v-if="pendingDiagnosis" class="pending-box">
+          <p class="form-tip">断网或关闭页面后，服务端会继续分析到处理时限；恢复草稿后可查询原结果。主动取消会保存一条失败回执。</p>
           <el-button :loading="queryingDiagnosis" @click="queryDiagnosisStatus()">查询本次诊断</el-button>
           <el-button :disabled="queryingDiagnosis" @click="queryDiagnosisStatus(true)">取消本次分析</el-button>
           <el-button :disabled="diagLoading || queryingDiagnosis" @click="newDiagnosis">开始新的诊断</el-button>
@@ -544,18 +588,17 @@ onMounted(() => {
 
       <!-- 右侧：AI初诊结果看板 -->
       <div class="app-card farmer-result-card" v-loading="diagLoading">
-        <h3 class="card-title"><el-icon><Search /></el-icon> AI 初诊研判报告</h3>
-        <p v-if="diagResult?.processed_at">结果保存时间：{{ diagResult.processed_at }}；{{ diagResult.replayed ? '本次恢复历史结果' : '本次已保存' }}</p>
+        <h3 class="card-title"><el-icon><Search /></el-icon> 模型初诊结果 <SourceBadge kind="ai" label="模型生成 · 非确诊" /></h3>
+        <p v-if="diagResult?.processed_at" class="form-tip">保存时间：{{ diagResult.processed_at }}；{{ diagResult.replayed ? '恢复的历史结果' : '本次已保存' }}</p>
 
         <div v-if="!diagResult && !diagLoading" class="empty-diag-box">
           <div class="empty-icon"><el-icon :size="48"><FirstAidKit /></el-icon></div>
-          <div class="empty-text">请在左侧上传病叶图片并点击诊断，AI 视觉模型将在此出具分析报告</div>
+          <div class="empty-text">上传照片并开始初诊后，结果会显示在这里</div>
         </div>
 
         <div v-else-if="diagResult?.diagnosis_status === 'failed'" class="diag-report">
-          <el-alert title="本次图像诊断未完成" :description="diagResult.error_message || diagResult.advice" type="error" :closable="false" show-icon />
-          <p>错误码：{{ diagResult.error_code || 'vision_error' }}</p>
-          <p v-if="diagResult.request_id">诊断请求ID：{{ diagResult.request_id }}</p>
+          <el-alert title="本次图像初诊未完成" :description="diagResult.error_message || diagResult.advice" type="error" :closable="false" show-icon />
+          <p v-if="diagResult.request_id" class="form-tip">诊断请求ID：{{ diagResult.request_id }}（反馈问题时请提供）</p>
           <p v-if="diagResult.ticket_id">此前已创建专家工单 #{{ diagResult.ticket_id }}，可在历史记录中查看。</p>
           <p v-else-if="diagResult.disease_record_id">此前已保存记录 #{{ diagResult.disease_record_id }}，可在历史记录中查看。</p>
           <p v-else>本次未生成病害记录或专家工单。</p>
@@ -569,26 +612,26 @@ onMounted(() => {
               <span class="disease-name">{{ diagResult.suspected_disease }}</span>
             </div>
             <div class="dh-right">
-              <span class="conf-title">模型评分（非准确率）</span>
-              <span class="conf-value" :class="(diagResult.confidence ?? 0) >= 0.7 ? 'high' : 'low'">
-                {{ formatScore(diagResult.confidence) }}
-              </span>
+              <span class="conf-title">模型自评分（不是准确率）</span>
+              <span class="conf-value">{{ formatScore(diagResult.confidence) }}</span>
             </div>
           </div>
+          <p class="form-tip">疑似名称来自通用视觉模型对照片的描述，未经本地病害数据验证；相似症状可能来自其他病害、缺素、药害或环境胁迫。</p>
 
           <!-- 低置信度派发工单告警 -->
           <div v-if="diagResult.need_expert" class="expert-ticket-alert">
             <el-icon class="alert-icon"><Warning /></el-icon>
             <div class="alert-text">
-              <strong>【建议专家复核】请结合诊断建议处理</strong>
-              <p v-if="diagResult.ticket_id != null">系统已自动生成专家工单（工单号 #{{ diagResult.ticket_id }}），已派发至农技专家工作台进行人机协同二次确诊！</p>
-              <p v-else>本次未创建专家工单。{{ diagResult.advice }}</p>
+              <strong>建议农技专家复核</strong>
+              <p v-if="diagResult.ticket_id != null">已转交农技专家（工单 #{{ diagResult.ticket_id }}），专家复核后可在下方"病害记录与专家反馈"中查看。</p>
+              <p v-else-if="diagFieldId">本次未自动创建工单，可在下方历史记录中对这条记录"申请专家复核"。</p>
+              <p v-else>本次没有关联田块，记录未保存，无法转交专家。如需复核，请选择农场和田块后重新提交。</p>
             </div>
           </div>
 
           <!-- 特征检出列表 -->
           <div class="features-box" v-if="diagResult.features_detected && diagResult.features_detected.length > 0">
-            <span class="sec-label">视觉识别关键特征：</span>
+            <span class="sec-label">模型描述的可见特征：</span>
             <div class="tag-row">
               <el-tag
                 v-for="(feat, idx) in diagResult.features_detected"
@@ -596,7 +639,7 @@ onMounted(() => {
                 type="info"
                 effect="light"
               >
-                ✓ {{ feat }}
+                {{ feat }}
               </el-tag>
             </div>
           </div>
@@ -627,22 +670,24 @@ onMounted(() => {
       <!-- 左侧：工单列表 (320px) -->
       <div class="app-card tickets-list-col" v-loading="ticketsLoading">
         <div class="tickets-filter-bar">
-          <el-radio-group v-model="ticketFilterStatus" size="small" @change="fetchTickets">
+          <el-radio-group v-model="ticketFilterStatus" size="small" @change="changeTicketFilter">
             <el-radio-button label="all">全部</el-radio-button>
             <el-radio-button label="pending_review">待接单</el-radio-button>
-            <el-radio-button label="in_review">审阅中</el-radio-button>
-            <el-radio-button label="expert_reviewed">已确诊</el-radio-button>
+            <el-radio-button label="in_review">处理中</el-radio-button>
+            <el-radio-button label="expert_reviewed">已复核</el-radio-button>
           </el-radio-group>
-          <el-button :icon="Refresh" circle size="small" @click="fetchTickets" />
+          <el-button :icon="Refresh" circle size="small" aria-label="刷新工单列表" @click="fetchTickets" />
         </div>
 
         <div class="tickets-scroll-wrap">
           <el-empty v-if="tickets.length === 0" description="暂无符合条件的专家工单" />
-          <div
+          <button
             v-for="t in tickets"
             :key="t.ticket_id"
+            type="button"
             class="ticket-item-card"
             :class="{ active: selectedTicketId === t.ticket_id }"
+            :aria-pressed="selectedTicketId === t.ticket_id"
             @click="selectTicket(t.ticket_id)"
           >
             <div class="tic-header">
@@ -656,9 +701,9 @@ onMounted(() => {
             </div>
             <div class="tic-meta">
               <span>田块: {{ t.field_name || '未录入' }}</span>
-              <span>物候: {{ t.growth_stage }}</span>
+              <span>生育期: {{ t.growth_stage }}</span>
             </div>
-          </div>
+          </button>
         </div>
 
         <div class="tickets-pagination-bar" v-if="ticketTotal > ticketPageSize">
@@ -706,7 +751,7 @@ onMounted(() => {
           <div class="consult-columns">
             <!-- 栏 1：现场病斑图片与AI特征 -->
             <div class="consult-col pic-col">
-              <h4 class="col-title"><el-icon><Picture /></el-icon> 现场病斑图像与AI特征</h4>
+              <h4 class="col-title"><el-icon><Picture /></el-icon> 现场照片与模型描述</h4>
               <div class="detail-img-box">
                 <AuthenticatedImage
                   v-if="ticketDetail.image_url"
@@ -717,7 +762,7 @@ onMounted(() => {
                 <div v-else class="no-img">暂无病斑照片</div>
               </div>
               <div class="ai-feat-list" v-if="ticketDetail.ai_features">
-                <span class="sub-label">AI检出视觉特征：</span>
+                <span class="sub-label">模型描述的可见特征（未经核实）：</span>
                 <div class="tag-row">
                   <el-tag v-for="(f, idx) in ticketDetail.ai_features" :key="idx" size="small" type="info">
                     {{ f }}
@@ -732,7 +777,7 @@ onMounted(() => {
 
             <!-- 栏 2：田块时空全景（土壤、微气象、施药史） -->
             <div class="consult-col env-col">
-              <h4 class="col-title"><el-icon><MapLocation /></el-icon> 田块全景档案与时空环境</h4>
+              <h4 class="col-title"><el-icon><MapLocation /></el-icon> 田块档案与环境</h4>
 
               <div class="env-group">
                 <span class="env-group-title"><el-icon><House /></el-icon> 田块与土壤物理属性</span>
@@ -758,7 +803,7 @@ onMounted(() => {
                 <span class="env-group-title">近期农事记录（最多5条）</span>
                 <div class="mini-timeline" v-if="ticketDetail.recent_farming_records && ticketDetail.recent_farming_records.length > 0">
                   <div v-for="(r, idx) in ticketDetail.recent_farming_records" :key="idx" class="history-item">
-                    <span>{{ r.record_date }} · {{ r.record_type }}: {{ r.input_name || r.description || '未填写内容' }}</span>
+                    <span>{{ r.record_date }} · {{ recordKind(r.record_type).label }}：{{ r.input_name || r.description || '未填写内容' }}</span>
                   </div>
                 </div>
                 <div v-else class="text-muted">暂无已存农事记录</div>
@@ -767,7 +812,7 @@ onMounted(() => {
 
             <!-- 栏 3：专家确诊与知识反哺表单 -->
             <div class="consult-col form-col">
-              <h4 class="col-title"><el-icon><EditPen /></el-icon> 专家最终确诊与处方开具</h4>
+              <h4 class="col-title"><el-icon><EditPen /></el-icon> 专家复核结论</h4>
 
               <div v-if="ticketDetail.feedback" class="advice-box">
                 <p>{{ ticketDetail.feedback.workflow_verified ? '已核验本流程归档' : '历史结论：缺少本流程认领凭据，来源待核验' }}</p>
@@ -778,16 +823,16 @@ onMounted(() => {
               </div>
               <p v-else-if="!canSubmit">请先认领；只有当前认领人可以提交复核。</p>
               <el-form v-if="!ticketDetail.feedback" :disabled="!canSubmit || submittingResolve || claiming" label-position="top" class="resolve-form">
-                <el-form-item label="最终确诊病害全称" required>
-                  <el-input v-model="resolveForm.confirmed_disease" placeholder="例如：番茄晚疫病 (Phytophthora infestans)" />
+                <el-form-item label="复核结论" required>
+                  <el-input v-model="resolveForm.confirmed_disease" maxlength="100" placeholder="病害名称；无法确认时写明“资料不足，待鉴别”" />
                 </el-form-item>
 
-                <el-form-item label="综合防治处方及安全用药建议" required>
+                <el-form-item label="处置建议" required>
                   <el-input
                     v-model="resolveForm.treatment_suggestion"
                     type="textarea"
                     :rows="4"
-                    placeholder="精准药剂选择、稀释倍数、作业方式、安全间隔期与放风控湿指导"
+                    placeholder="农业措施与用药方向；涉及药剂请注明须按产品标签使用并遵守安全间隔期，资料不足时说明还需补充什么"
                   />
                 </el-form-item>
 
@@ -807,10 +852,10 @@ onMounted(() => {
                     :true-label="1"
                     :false-label="0"
                   >
-                    <strong>沉淀为 L4 级专家知识库实战案例 (Human-in-the-Loop)</strong>
+                    <strong>同时提交为知识库候选案例</strong>
                   </el-checkbox>
                   <p class="loop-tip">
-                    勾选后保存当前填写的 L4 专家案例；不代表标准认证，不自动重建向量索引。
+                    候选案例以"未核验"状态保存，管理员在知识库审核并改为专家来源后才参与检索。
                   </p>
                 </div>
 
@@ -822,7 +867,7 @@ onMounted(() => {
                   @click="submitExpertResolve"
                 >
                   <el-icon><Check /></el-icon>
-                  提交专家确诊处方并归档
+                  提交复核结论
                 </el-button>
               </el-form>
             </div>
@@ -847,20 +892,24 @@ onMounted(() => {
 
 .tabs-control {
   display: flex;
-  gap: var(--app-space-4);
-  margin-bottom: 10px;
+  flex-wrap: wrap;
+  gap: var(--app-space-2);
+  margin-bottom: var(--app-space-3);
 }
 
 .tab-btn {
   display: flex;
   align-items: center;
   gap: var(--app-space-2);
-  padding: 10px 20px;
+  min-height: var(--control-h-lg);
+  padding: 0 var(--app-space-5);
+  border: 1px solid transparent;
   border-radius: var(--app-radius-md);
   background: var(--app-surface-2);
   color: var(--app-text-secondary);
+  font: inherit;
   font-size: var(--app-text-base);
-  font-weight: 600;
+  font-weight: 500;
   cursor: pointer;
   transition: var(--app-transition);
   position: relative;
@@ -888,6 +937,34 @@ onMounted(() => {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+}
+
+/* 初诊流程进度 */
+.farmer-steps {
+  margin-bottom: var(--app-space-4);
+}
+
+.photo-guide {
+  margin: var(--app-space-3) 0 0;
+  padding-left: var(--app-space-5);
+  font-size: var(--app-text-xs);
+  line-height: 1.7;
+  color: var(--app-text-secondary);
+}
+
+.draft-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--app-space-2);
+  margin-bottom: var(--app-space-3);
+}
+
+.pending-box {
+  margin-top: var(--app-space-3);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--app-space-2);
 }
 
 /* ================= 农户端 ================= */
@@ -930,7 +1007,9 @@ onMounted(() => {
 .preview-img {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  /* 完整显示照片，不裁掉病斑边缘 */
+  object-fit: contain;
+  background: var(--app-surface-2);
 }
 
 .replace-mask {
@@ -1028,17 +1107,12 @@ onMounted(() => {
   color: var(--app-text-secondary);
 }
 
+/* 模型自评分不是准确率：用中性色显示，不做"可靠/不可靠"的红绿分级 */
 .conf-value {
-  font-size: var(--app-text-2xl);
-  font-weight: 700;
-}
-
-.conf-value.high {
-  color: var(--el-color-success);
-}
-
-.conf-value.low {
-  color: var(--el-color-danger);
+  font-size: var(--app-text-xl);
+  font-weight: 600;
+  color: var(--app-text);
+  font-variant-numeric: tabular-nums;
 }
 
 .expert-ticket-alert {
@@ -1133,6 +1207,11 @@ onMounted(() => {
 }
 
 .ticket-item-card {
+  display: block;
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  color: inherit;
   background: var(--app-surface-2);
   border: 1px solid var(--app-border-light);
   border-radius: var(--app-radius-md);
@@ -1222,6 +1301,16 @@ onMounted(() => {
   gap: var(--app-space-5);
 }
 
+@media (max-width: 1440px) {
+  .consult-columns {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  .consult-columns .form-col {
+    grid-column: 1 / -1;
+  }
+}
+
 .consult-col {
   background: var(--app-surface-2);
   border: 1px solid var(--app-border-light);
@@ -1255,7 +1344,7 @@ onMounted(() => {
 .consult-img {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
 }
 
 .no-img {

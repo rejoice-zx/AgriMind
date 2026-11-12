@@ -15,7 +15,8 @@ const context = () => ({ context_fingerprint: 'a'.repeat(64), available_crops: [
   snapshot: { crop: { id: 11, crop: 'synthetic' }, records: [{ id: 7, record_type: '病虫害防治', input_name: 'synthetic recorded name', revoked_at: null }] },
   spraying_record_ids: [7], current_review_status: 'no_signed_operation_review', review_window_hours: 24, note: 'synthetic' })
 const ticket = () => ({ id: 'synthetic-ticket', status: 'in_review', assigned_to_current_user: true, answer: null })
-function harness(overrides = {}, { store = new Map(), initial = ticket(), account = { id: 1, username: 'synthetic', created_at: 'lifetime1' } } = {}) {
+function harness(overrides = {}, { store = new Map(), initial = ticket(), account = { id: 1, username: 'synthetic', created_at: 'lifetime1' }, decline = false } = {}) {
+  const confirms = [], declineConfirm = { value: decline }
   const events = [], messages = [], scope = vue.effectScope(), props = vue.reactive({ ticket: initial }), auth = vue.reactive({ user: account })
   const localStorage = { getItem: key => store.get(key) ?? null, setItem: (key, value) => store.set(key, value), removeItem: key => store.delete(key) }
   function helper(path) {
@@ -31,7 +32,10 @@ function harness(overrides = {}, { store = new Map(), initial = ticket(), accoun
   new Script(code).runInContext(createContext({ module, exports: module.exports, crypto: { randomUUID },
     require: name => {
       if (name === 'vue') return { ...vue, onBeforeUnmount() {} }
-      if (name === 'element-plus') return { ElMessage: Object.fromEntries(['error','warning','success'].map(level => [level, message => messages.push({ level, message })])) }
+      if (name === 'element-plus') return { ElMessage: Object.fromEntries(['error','warning','success'].map(level => [level, message => messages.push({ level, message })])),
+        // Expert sign-off now asks for confirmation; tests accept unless a scenario declines.
+        ElMessageBox: { confirm: async (...args) => { confirms.push(args[1]); if (declineConfirm.value) throw 'cancel' } } }
+      if (name === '@/utils/requestId') return { newRequestId: randomUUID }
       if (name === '@/stores/auth') return { useAuthStore: () => auth }
       if (name === '@/api/agriHistory') return api
       if (name === '@/utils/scopedDraft') return draft
@@ -40,7 +44,7 @@ function harness(overrides = {}, { store = new Map(), initial = ticket(), accoun
     }
   }))
   const state = scope.run(() => module.exports.default.setup(props, { expose() {}, emit: (name, data) => events.push({ name, data: native(data) }) }))
-  return { state, props, auth, store, events, messages, dispose: () => scope.stop() }
+  return { state, props, auth, store, events, messages, confirms, declineConfirm, dispose: () => scope.stop() }
 }
 
 test('formal review starts without facts, incomplete approval is blocked, refreshed context clears attestations', async () => {
@@ -129,5 +133,19 @@ test('signature conflict recovers an original receipt that completed after the f
   env.state.form.value.answer = 'synthetic'; await env.state.submit()
   assert.equal(gets, 2); assert.equal(env.state.pending.value, null)
   assert.equal(env.events.filter(item => item.name === 'saved').length, 1)
+  env.dispose()
+})
+
+test('expert sign-off asks for confirmation and cancelling submits nothing', async () => {
+  let posts = 0
+  const env = harness({ resolveAgriConsultation: async () => { ++posts; return { data: { ...ticket(), status: 'resolved' } } } }, { decline: true })
+  env.state.form.value.answer = 'synthetic answer'
+  await env.state.submit()
+  assert.equal(env.confirms.length, 1)
+  assert.equal(posts, 0)
+  assert.equal(env.state.pending.value, null)
+  env.declineConfirm.value = false
+  await env.state.submit()
+  assert.equal(posts, 1)
   env.dispose()
 })

@@ -61,6 +61,39 @@
 
   /* ---------- 动效 ---------- */
   --app-transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  --app-ease: cubic-bezier(0.22, 1, 0.36, 1);
+
+  /* ---------- 状态语义色（文字对白底对比度 ≥ 4.5:1；不得用于生育期等非状态信息） ---------- */
+  --state-success: #047857;
+  --state-warning: #b45309;
+  --state-danger: #dc2626;
+  --state-info: #475569;
+
+  /* ---------- 数据来源徽标（预报 / 现场观测 / 档案 / 模型生成 / 专家签署 / 知识候选） ---------- */
+  --source-forecast-fg: #0369a1;
+  --source-forecast-bg: #f0f9ff;
+  --source-forecast-border: #bae6fd;
+  --source-observation-fg: #6d28d9;
+  --source-observation-bg: #f5f3ff;
+  --source-observation-border: #ddd6fe;
+  --source-record-fg: #475569;
+  --source-record-bg: #f8fafc;
+  --source-record-border: #e2e8f0;
+  --source-ai-fg: #92400e;
+  --source-ai-bg: #fffbeb;
+  --source-ai-border: #fde68a;
+  --source-expert-fg: #047857;
+  --source-expert-bg: #ecfdf5;
+  --source-expert-border: #a7f3d0;
+  --source-knowledge-fg: #3f6212;
+  --source-knowledge-bg: #f7fee7;
+  --source-knowledge-border: #d9f99d;
+
+  /* ---------- 控件与触控尺寸 ---------- */
+  --control-h-sm: 32px;
+  --control-h-md: 36px;
+  --control-h-lg: 44px;
+  --touch-min: 32px;
 
   /* ---------- 旧变量别名（兼容存量 var() 引用，自动跟随暗色） ---------- */
   --bg-color: var(--app-bg);
@@ -103,6 +136,29 @@ html.dark {
   --app-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
   --app-shadow-md: 0 2px 8px rgba(0, 0, 0, 0.35);
   --app-shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.4);
+
+  --state-success: #34d399;
+  --state-warning: #fbbf24;
+  --state-danger: #f87171;
+  --state-info: #a3a6ad;
+  --source-forecast-fg: #7dd3fc;
+  --source-forecast-bg: rgba(14, 165, 233, 0.12);
+  --source-forecast-border: rgba(125, 211, 252, 0.3);
+  --source-observation-fg: #c4b5fd;
+  --source-observation-bg: rgba(139, 92, 246, 0.14);
+  --source-observation-border: rgba(196, 181, 253, 0.3);
+  --source-record-fg: #cbd5e1;
+  --source-record-bg: rgba(148, 163, 184, 0.12);
+  --source-record-border: rgba(148, 163, 184, 0.3);
+  --source-ai-fg: #fcd34d;
+  --source-ai-bg: rgba(245, 158, 11, 0.12);
+  --source-ai-border: rgba(252, 211, 77, 0.3);
+  --source-expert-fg: #6ee7b7;
+  --source-expert-bg: rgba(16, 185, 129, 0.12);
+  --source-expert-border: rgba(110, 231, 183, 0.3);
+  --source-knowledge-fg: #bef264;
+  --source-knowledge-bg: rgba(132, 204, 22, 0.12);
+  --source-knowledge-border: rgba(190, 242, 100, 0.3);
 
   /* Element 暗色覆写（原 App.vue 收口至此） */
   --el-bg-color: #1d1e1f;
@@ -221,10 +277,97 @@ html.dark .el-select__wrapper {
   box-shadow: var(--app-shadow-md);
 }
 
+/* 说明性文字（替代散落的裸 <p>） */
+.app-note {
+  margin: var(--app-space-2) 0;
+  font-size: var(--app-text-sm);
+  line-height: 1.6;
+  color: var(--app-text-secondary);
+}
+
+/* 数值统一等宽数字，便于纵向比对 */
+.app-num {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ============================================================
+ * 弹窗：任何宽度都不超出视口（固定宽度弹窗在手机上会被裁掉"保存"按钮）
+ * ============================================================ */
+.el-dialog {
+  max-width: calc(100vw - 24px);
+}
+
+.el-dialog__body {
+  overflow-wrap: anywhere;
+}
+
+/* 键盘焦点必须可见 */
+:focus-visible {
+  outline: 2px solid var(--el-color-primary);
+  outline-offset: 2px;
+}
+
+/* 尊重系统"减少动态效果"设置 */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
 /* ============================================================
  * 移动端适配（≤767px）：触控目标加固（最小 32px）
  * ============================================================ */
 @media (max-width: 767px) {
+  /* 页面内边距收窄，给内容留出宽度 */
+  .app-page {
+    padding: var(--app-space-4) var(--app-space-3);
+  }
+
+  /* 手机上弹窗贴满可用宽度；表单标签统一放到输入框上方（通过 .el-form--label-left 也强制上置） */
+  .el-dialog {
+    width: calc(100vw - 24px) !important;
+    margin-top: 6vh !important;
+  }
+
+  .el-dialog .el-form-item,
+  .el-drawer .el-form-item {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .el-dialog .el-form-item__label,
+  .el-drawer .el-form-item__label {
+    width: auto !important;
+    justify-content: flex-start;
+    margin-bottom: var(--app-space-1);
+    line-height: 1.5;
+  }
+
+  .el-dialog .el-form-item__content,
+  .el-drawer .el-form-item__content {
+    margin-left: 0 !important;
+  }
+
+  /* 弹窗/抽屉里的栅格列在手机上改为整行 */
+  .el-dialog .el-row > .el-col,
+  .el-drawer .el-row > .el-col {
+    max-width: 100%;
+    flex: 0 0 100%;
+  }
+
+  /* 日期区间、筛选输入不超出屏幕 */
+  .el-date-editor.el-range-editor,
+  .el-date-editor--datetimerange,
+  .el-date-editor--daterange {
+    width: 100% !important;
+    max-width: 100%;
+  }
+
   .el-button--small {
     min-height: 32px;
     padding: 6px var(--app-space-3);

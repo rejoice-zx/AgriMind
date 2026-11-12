@@ -8,6 +8,8 @@ import FieldWeatherPanel from '@/components/FieldWeatherPanel.vue'
 import FieldEnvironmentPanel from '@/components/FieldEnvironmentPanel.vue'
 import FieldCropHistory from '@/components/FieldCropHistory.vue'
 import PageHeader from '@/components/PageHeader.vue'
+import { recordKind, RECORD_TYPE_OPTIONS, GROWTH_STAGE_OPTIONS, PHI_MAX_DAYS } from '@/constants/agri'
+import { errorText, isDismissed } from '@/utils/errorText'
 import { useAuthStore } from '@/stores/auth'
 import { ref, onMounted, onBeforeUnmount, computed, watch } from 'vue'
 import { storeToRefs } from 'pinia'
@@ -20,7 +22,7 @@ import {
   Calendar,
   DocumentAdd,
   List,
-  Sunny,
+  Crop,
   House,
   EditPen,
   Notebook
@@ -359,15 +361,24 @@ function openEditCrop(field: FieldItem) {
 async function submitCreateCrop() {
   // 防止双击创建两个活跃批次（BUG-027）
   if (!targetFieldForCrop.value || mutationBusy.value) return
+  const previous = editingCropId.value ? targetFieldForCrop.value.cropOptions?.find(crop => crop.id === editingCropId.value)?.status : undefined
+  const ending = editingCropId.value && cropForm.value.status !== 'active' && previous === 'active'
+  if (ending) {
+    try {
+      await ElMessageBox.confirm(
+        `确认将本批次标记为"${cropForm.value.status === 'harvested' ? '已完成采收' : '已终止'}"？结束后检查提醒停止生成，档案只能查看；如需恢复，需要在批次历史中填写原因。`,
+        '结束本茬', { type: 'warning', confirmButtonText: '确认结束', cancelButtonText: '取消' })
+    } catch (error) { if (isDismissed(error)) return; throw error }
+  }
   mutationBusy.value = true
   try {
     if (editingCropId.value) await updateCropPlanting(editingCropId.value, cropForm.value)
     else await createCropPlanting(targetFieldForCrop.value.id, cropForm.value)
-    ElMessage.success('种植档案已保存，历史农事记录保留')
+    ElMessage.success(ending ? '本批次已结束，历史记录保留' : '种植档案已保存')
     cropDialogVisible.value = false
     await fetchFields()
-  } catch (err: any) {
-    ElMessage.error(err.response?.data?.detail || '创建作物档案失败')
+  } catch (err: unknown) {
+    ElMessage.error(errorText(err, '保存种植档案失败'))
   } finally { mutationBusy.value = false }
 }
 
@@ -398,7 +409,7 @@ async function fetchFieldRecords(fieldId: number) {
     if (!alive || current !== recordsVersion || currentFieldForRecord.value?.id !== fieldId) return
     farmingRecords.value = Array.isArray(res.data) ? res.data : ((res.data as any)?.items || [])
   } catch (err: any) {
-    if (alive && current === recordsVersion) ElMessage.error(err.message || '加载农事记录失败')
+    if (alive && current === recordsVersion) ElMessage.error(errorText(err, '加载农事记录失败'))
   } finally {
     if (alive && current === recordsVersion) recordLoading.value = false
   }
@@ -442,8 +453,8 @@ async function submitNewRecord() {
       recordStatus.value = 'active'
       await fetchFieldRecords(currentFieldForRecord.value.id)
     }
-  } catch (err: any) {
-    ElMessage.error(err.response?.data?.detail || '保存农事记录失败')
+  } catch (err: unknown) {
+    ElMessage.error(errorText(err, '保存农事记录失败'))
   } finally { mutationBusy.value = false }
 }
 
@@ -462,18 +473,19 @@ async function discardRecordDraft() {
 }
 
 // 格式化辅助
+const recordTypeOptions = RECORD_TYPE_OPTIONS
+const growthStageOptions = GROWTH_STAGE_OPTIONS
+const phiMax = PHI_MAX_DAYS
+const isSprayType = (type?: string) => recordKind(type).key === 'spraying'
+const needsInput = (type?: string) => ['spraying', 'fertilization'].includes(recordKind(type).key)
+// 已执行的农事不能登记在未来
+const disableFutureDate = (date: Date) => date.getTime() > new Date(`${businessDate()}T23:59:59`).getTime()
+// 当前账号能否修改本农场（所有者或管理员）；专家只读
+const canManage = computed(() => !!currentFarm.value && (auth.user?.role === 'admin' || currentFarm.value.owner_id === auth.user?.id))
+
 function formatRecordType(type: string) {
-  const map: Record<string, { label: string; tag: string }> = {
-    inspection: { label: '现场检查（非作业实施）', tag: 'info' },
-    spraying: { label: '植保施药', tag: 'danger' },
-    fertilization: { label: '水肥灌溉', tag: 'success' },
-    irrigation: { label: '日常浇水', tag: 'primary' },
-    pruning: { label: '整枝打杈', tag: 'warning' },
-    weeding: { label: '人工除草', tag: 'info' },
-    harvest: { label: '批次采收', tag: 'success' },
-    other: { label: '其他农事', tag: '' }
-  }
-  return map[type] || { label: type, tag: 'info' }
+  const kind = recordKind(type)
+  return { label: kind.label, tag: kind.tag }
 }
 
 onMounted(() => {
@@ -489,12 +501,12 @@ onMounted(() => {
 <template>
   <div class="app-page agri-farms-page">
     <PageHeader
-      title="智慧农场与种植地块看板"
-      description="农场多租户空间配置、数字地块土壤档案与作物全生命周期生长批次管理"
+      title="农场与田块"
+      description="管理农场位置、田块（大棚）档案与种植批次；归档只隐藏不删除，历史记录始终保留。"
     >
       <template #actions>
-        <el-button v-if="currentFarm && (auth.user?.role === 'admin' || currentFarm.owner_id === auth.user?.id)" :loading="mutationBusy" @click="toggleArchive()">{{ currentFarm.archived_at ? '恢复农场' : '归档农场' }}</el-button>
-        <el-button v-if="currentFarm && (auth.user?.role === 'admin' || currentFarm.owner_id === auth.user?.id)" :disabled="!!currentFarm.archived_at" @click="editLocation">绑定 / 修改天气位置</el-button>
+        <el-button v-if="canManage" :loading="mutationBusy" @click="toggleArchive()">{{ currentFarm?.archived_at ? '恢复农场' : '归档农场' }}</el-button>
+        <el-button v-if="canManage" :disabled="!!currentFarm?.archived_at" @click="editLocation">天气位置</el-button>
         <div class="farm-select-wrap">
           <span class="label">当前农场：</span>
           <el-select
@@ -514,7 +526,7 @@ onMounted(() => {
         <el-button type="primary" :icon="Plus" @click="farmDialogVisible = true">
           新建农场
         </el-button>
-        <el-button :icon="Refresh" circle @click="fetchFields" />
+        <el-button :icon="Refresh" circle aria-label="刷新田块列表" title="刷新田块列表" @click="fetchFields" />
       </template>
     </PageHeader>
 
@@ -530,12 +542,12 @@ onMounted(() => {
           <FieldWeatherPanel :farm-id="currentFarmId" :refresh-key="weatherVersion" inline />
         </div>
         <div class="meta-item">
-          <el-icon><Sunny /></el-icon>
-          <span>规划总面积：<strong>{{ currentFarm.area }} 亩</strong></span>
+          <el-icon><Crop /></el-icon>
+          <span>农场面积：<strong class="app-num">{{ currentFarm.area ?? '未录入' }}</strong> 亩</span>
         </div>
         <div class="meta-item">
           <el-icon><List /></el-icon>
-          <span>已建地块/大棚数：<strong>{{ fields.length }} 块</strong></span>
+          <span>田块 / 大棚：<strong class="app-num">{{ fields.length }}</strong> 个</span>
         </div>
         <div class="meta-item desc">
           <span>简介：{{ currentFarm.description || '无' }}</span>
@@ -569,11 +581,11 @@ onMounted(() => {
               <el-tag v-if="field.archived_at" type="info">已归档</el-tag>
             </div>
             <el-dropdown trigger="click">
-              <span class="more-btn">•••</span>
+              <button type="button" class="more-btn" :aria-label="`${field.name} 更多操作`">•••</button>
               <template #dropdown>
                 <el-dropdown-menu>
-                  <el-dropdown-item :disabled="archivedField(field) || mutationBusy || !(auth.user?.role === 'admin' || currentFarm?.owner_id === auth.user?.id)" @click="openEditField(field)">编辑田块 / 设施类型</el-dropdown-item>
-                  <el-dropdown-item :disabled="!!currentFarm?.archived_at || mutationBusy || !(auth.user?.role === 'admin' || currentFarm?.owner_id === auth.user?.id)" @click="toggleArchive(field)">
+                  <el-dropdown-item :disabled="archivedField(field) || mutationBusy || !canManage" @click="openEditField(field)">编辑田块 / 设施类型</el-dropdown-item>
+                  <el-dropdown-item :disabled="!!currentFarm?.archived_at || mutationBusy || !canManage" @click="toggleArchive(field)">
                     {{ field.archived_at ? '恢复田块' : '归档田块（保留历史）' }}
                   </el-dropdown-item>
                 </el-dropdown-menu>
@@ -600,9 +612,9 @@ onMounted(() => {
 
           <!-- 二级入口：现场环境观测 / 批次档案（一行紧凑排列） -->
           <div class="field-quick-links">
-            <FieldEnvironmentPanel :field="field" :readonly="archivedField(field) || !(auth.user?.role === 'admin' || currentFarm?.owner_id === auth.user?.id)" @saved="weatherVersion++" />
+            <FieldEnvironmentPanel :field="field" :readonly="archivedField(field) || !canManage"@saved="weatherVersion++" />
             <span class="ql-divider"></span>
-            <FieldCropHistory :field="field" :readonly="archivedField(field) || !(auth.user?.role === 'admin' || currentFarm?.owner_id === auth.user?.id)" @changed="cropHistoryChanged" @records="(crop: CropPlanting) => openRecordDrawer(field, crop)" />
+            <FieldCropHistory :field="field" :readonly="archivedField(field) || !canManage"@changed="cropHistoryChanged" @records="(crop: CropPlanting) => openRecordDrawer(field, crop)" />
           </div>
 
           <!-- 作物种植批次状态卡 -->
@@ -614,7 +626,7 @@ onMounted(() => {
             <div v-if="field.activeCrop" class="active-crop-info">
               <div class="crop-title-row">
                 <span class="crop-name">{{ field.activeCrop.crop }} ({{ field.activeCrop.variety || '品种未登记' }})</span>
-                <el-tag size="small" type="warning" effect="dark">{{ field.activeCrop.growth_stage }}</el-tag>
+                <el-tag size="small" type="info" effect="plain" class="stage-tag">{{ field.activeCrop.growth_stage }}</el-tag>
               </div>
               <div class="crop-date-row">
                 <span>定植: {{ field.activeCrop.planting_date }}</span>
@@ -666,15 +678,18 @@ onMounted(() => {
       </div>
     </div>
 
-    <el-dialog v-model="locationDialog" title="绑定 / 修改天气位置" :width="isMobile ? '94%' : '680px'" :close-on-click-modal="!mutationBusy" destroy-on-close>
-      <el-form label-width="100px"><FarmLocationForm :key="locationTargetId || 0" v-model="locationForm" /></el-form>
-      <template #footer><el-button :loading="mutationBusy" @click="saveLocation">保存位置</el-button></template>
+    <el-dialog v-model="locationDialog" title="农场天气位置" :width="isMobile ? '94%' : '680px'" :close-on-click-modal="!mutationBusy" destroy-on-close>
+      <el-form :label-width="isMobile ? 'auto' : '100px'" :label-position="isMobile ? 'top' : 'right'"><FarmLocationForm :key="locationTargetId || 0" v-model="locationForm" /></el-form>
+      <template #footer>
+        <el-button :disabled="mutationBusy" @click="locationDialog = false">取消</el-button>
+        <el-button type="primary" :loading="mutationBusy" @click="saveLocation">保存位置</el-button>
+      </template>
     </el-dialog>
     <!-- 创建农场对话框 -->
-    <el-dialog v-model="farmDialogVisible" title="创建新数字农场" :width="isMobile ? '94%' : '560px'">
-      <el-form :model="farmForm" label-width="100px" class="farm-dialog-form">
+    <el-dialog v-model="farmDialogVisible" title="新建农场" :width="isMobile ? '94%' : '560px'" :close-on-click-modal="!mutationBusy">
+      <el-form :model="farmForm" :label-width="isMobile ? 'auto' : '100px'" :label-position="isMobile ? 'top' : 'right'" :disabled="mutationBusy" class="farm-dialog-form">
         <el-form-item label="农场名称" required>
-          <el-input v-model="farmForm.name" placeholder="例如：寿光现代数字果蔬示范农场" />
+          <el-input v-model="farmForm.name" maxlength="100" placeholder="例如：寿光果蔬示范农场" />
         </el-form-item>
         <FarmLocationForm v-model="farmForm" />
         <el-form-item label="详细地址">
@@ -696,7 +711,7 @@ onMounted(() => {
 
     <!-- 创建地块对话框 -->
     <el-dialog v-model="fieldDialogVisible" :title="editingFieldId ? '编辑田块 / 设施类型' : '新增地块 / 温室大棚'" :width="isMobile ? '94%' : '520px'">
-      <el-form :model="fieldForm" label-width="100px" :disabled="mutationBusy">
+      <el-form :model="fieldForm" :label-width="isMobile ? 'auto' : '100px'" :label-position="isMobile ? 'top' : 'right'" :disabled="mutationBusy">
         <el-form-item label="地块名称" required>
           <el-input v-model="fieldForm.name" placeholder="例如：1号日光温室大棚" />
         </el-form-item>
@@ -737,13 +752,13 @@ onMounted(() => {
     </el-dialog>
 
     <!-- 登记作物种植档案对话框 -->
-    <el-dialog v-model="cropDialogVisible" :title="editingCropId ? '更新种植档案' : '建立地块种植档案'" :width="isMobile ? '94%' : '540px'">
-      <el-form :model="cropForm" label-width="110px">
-        <el-form-item label="批次状态">
+    <el-dialog v-model="cropDialogVisible" :title="editingCropId ? '更新种植批次' : '登记种植批次'" :width="isMobile ? '94%' : '540px'" :close-on-click-modal="!mutationBusy">
+      <el-form :model="cropForm" :label-width="isMobile ? 'auto' : '110px'" :label-position="isMobile ? 'top' : 'right'" :disabled="mutationBusy">
+        <el-form-item v-if="editingCropId" label="批次状态">
           <el-select v-model="cropForm.status">
             <el-option label="在种" value="active" />
-            <el-option label="已完成采收" value="harvested" />
-            <el-option label="已终止" value="terminated" />
+            <el-option label="已完成采收（结束本茬）" value="harvested" />
+            <el-option label="已终止（毁种、绝收等）" value="terminated" />
           </el-select>
         </el-form-item>
         <el-form-item label="种植作物" required>
@@ -752,14 +767,11 @@ onMounted(() => {
         <el-form-item label="品种规格">
           <el-input v-model="cropForm.variety" placeholder="例如：普罗旺斯、草莓番茄" />
         </el-form-item>
-        <el-form-item label="当前物候期" required>
+        <el-form-item label="当前生育期" required>
           <el-select v-model="cropForm.growth_stage" style="width: 100%">
-            <el-option label="待核实" value="待核实" />
-            <el-option label="苗期 / 缓苗期" value="苗期" />
-            <el-option label="开花坐果期 (需肥需水关键期)" value="开花坐果期" />
-            <el-option label="膨果转色期" value="果实膨大期" />
-            <el-option label="采收盛期" value="采收期" />
+            <el-option v-for="option in growthStageOptions" :key="option.value" :label="option.label" :value="option.value" />
           </el-select>
+          <p class="app-note">生育期会随时间变化，系统不会自动更新；进入新阶段后请回来修改。</p>
         </el-form-item>
         <el-form-item label="定植日期" required>
           <el-date-picker
@@ -802,19 +814,14 @@ onMounted(() => {
             </div>
           </template>
 
-          <el-form :model="newRecordForm" label-width="90px" size="small" :disabled="archivedField(currentFieldForRecord)">
+          <el-form :model="newRecordForm" :label-width="isMobile ? 'auto' : '90px'" :label-position="isMobile ? 'top' : 'right'" size="small" :disabled="archivedField(currentFieldForRecord) || mutationBusy">
             <el-alert v-if="draftNotice" :title="draftNotice" type="info" :closable="false" />
             <el-button link :disabled="mutationBusy" @click="discardRecordDraft">清空草稿，另记一笔</el-button>
             <el-row :gutter="12">
               <el-col :span="12">
                 <el-form-item label="作业类型">
                   <el-select v-model="newRecordForm.record_type" style="width: 100%">
-                    <el-option label="植保施药" value="spraying" />
-                    <el-option label="水肥灌溉" value="fertilization" />
-                    <el-option label="日常浇水" value="irrigation" />
-                    <el-option label="整枝打杈" value="pruning" />
-                    <el-option label="人工除草" value="weeding" />
-                    <el-option label="批次采收" value="harvest" />
+                    <el-option v-for="option in recordTypeOptions" :key="option.value" :label="option.label" :value="option.value" />
                   </el-select>
                 </el-form-item>
               </el-col>
@@ -824,6 +831,7 @@ onMounted(() => {
                     v-model="newRecordForm.operation_date"
                     type="date"
                     value-format="YYYY-MM-DD"
+                    :disabled-date="disableFutureDate"
                     style="width: 100%"
                   />
                 </el-form-item>
@@ -834,35 +842,35 @@ onMounted(() => {
               <el-input v-model="newRecordForm.operation_content" placeholder="例：喷雾防治早疫病，严格打透叶背" />
             </el-form-item>
 
-            <el-row :gutter="12" v-if="newRecordForm.record_type === 'spraying' || newRecordForm.record_type === 'fertilization'">
-              <el-col :span="12">
-                <el-form-item label="药剂/肥料">
-                  <el-input v-model="newRecordForm.chemical_name" placeholder="如: 68%精甲霜·锰锌" />
+            <el-row :gutter="12" v-if="needsInput(newRecordForm.record_type)">
+              <el-col :xs="24" :sm="12">
+                <el-form-item :label="isSprayType(newRecordForm.record_type) ? '农药名称（标签全名）' : '肥料名称'">
+                  <el-input v-model="newRecordForm.chemical_name" :placeholder="isSprayType(newRecordForm.record_type) ? '如：68%精甲霜·锰锌水分散粒剂' : '如：复合肥 15-15-15'" />
                 </el-form-item>
               </el-col>
-              <el-col :span="12">
-                <el-form-item label="用药剂量">
-                  <el-input v-model="newRecordForm.dosage" placeholder="如: 100g/亩" />
-                </el-form-item>
-              </el-col>
-            </el-row>
-
-            <el-row :gutter="12" v-if="newRecordForm.record_type === 'spraying'">
-              <el-col :span="12">
-                <el-form-item label="安全间隔期">
-                  <el-input-number v-model="newRecordForm.safety_interval_days" :min="0" :max="90" style="width: 100%" />
-                  <span style="font-size: 11px; color: var(--app-text-placeholder)">天 (PHI)</span>
-                </el-form-item>
-              </el-col>
-              <el-col :span="12">
-                <el-form-item label="操作农艺师">
-                  <el-input v-model="newRecordForm.operator" placeholder="操作人员" />
+              <el-col :xs="24" :sm="12">
+                <el-form-item label="用量">
+                  <el-input v-model="newRecordForm.dosage" placeholder="如：100 g/亩" />
                 </el-form-item>
               </el-col>
             </el-row>
 
-            <div style="text-align: right; margin-top: 10px">
-              <el-button type="primary" size="small" @click="submitNewRecord">保存记录</el-button>
+            <el-row :gutter="12">
+              <el-col v-if="isSprayType(newRecordForm.record_type)" :xs="24" :sm="12">
+                <el-form-item label="安全间隔期（天）">
+                  <el-input-number v-model="newRecordForm.safety_interval_days" :min="0" :max="phiMax" placeholder="按产品标签填写" style="width: 100%" />
+                  <p class="app-note">不知道请留空，不要填 0</p>
+                </el-form-item>
+              </el-col>
+              <el-col :xs="24" :sm="12">
+                <el-form-item label="执行人">
+                  <el-input v-model="newRecordForm.operator" maxlength="100" placeholder="实际操作人" />
+                </el-form-item>
+              </el-col>
+            </el-row>
+
+            <div class="record-submit-row">
+              <el-button type="primary" size="small" :loading="mutationBusy" @click="submitNewRecord">保存记录</el-button>
             </div>
           </el-form>
         </el-card>
@@ -883,18 +891,18 @@ onMounted(() => {
               :key="record.id"
               :timestamp="record.operation_date"
               placement="top"
-              :type="formatRecordType(record.record_type).tag as any"
+              :type="formatRecordType(record.record_type).tag"
             >
               <div class="timeline-card">
                 <div class="timeline-head">
-                  <el-tag size="small" :type="formatRecordType(record.record_type).tag as any">
+                  <el-tag size="small" :type="formatRecordType(record.record_type).tag">
                     {{ formatRecordType(record.record_type).label }}
                   </el-tag>
                   <el-tag v-if="record.revoked_at" type="info" size="small">已撤销</el-tag>
                   <el-button v-else-if="canRevoke(record)" type="danger" size="small" :loading="mutationBusy" @click="revokeRecord(record)">撤销误录</el-button>
                   <small v-else-if="recordHistoryOnly">历史档案只读</small>
                   <small v-else>非本人录入、已超时或创建者不可核实，请联系管理员</small>
-                  <span class="operator-badge" v-if="record.operator">农艺师: {{ record.operator }}</span>
+                  <span class="operator-badge" v-if="record.operator">执行人：{{ record.operator }}</span>
                 </div>
                 <div class="timeline-content">{{ record.operation_content }}</div>
                 <div v-if="record.revoked_at" class="timeline-content">
@@ -993,9 +1001,7 @@ onMounted(() => {
   flex-direction: column;
 }
 
-.field-card:hover {
-  transform: translateY(-2px);
-}
+/* 卡片 hover 只加阴影（.app-card--hover），不做位移，避免触屏误判与晃动 */
 
 .card-header {
   display: flex;
@@ -1029,11 +1035,26 @@ onMounted(() => {
 }
 
 .more-btn {
+  min-width: var(--touch-min);
+  min-height: var(--touch-min);
+  border: none;
+  background: transparent;
   cursor: pointer;
-  color: var(--app-text-placeholder);
+  color: var(--app-text-secondary);
+  font: inherit;
   font-size: var(--app-text-lg);
-  padding: 2px 6px;
+  padding: 0 var(--app-space-2);
   border-radius: var(--app-radius-sm);
+}
+
+.stage-tag {
+  font-weight: 500;
+}
+
+.record-submit-row {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: var(--app-space-3);
 }
 
 .more-btn:hover {

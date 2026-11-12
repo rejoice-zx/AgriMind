@@ -3,6 +3,7 @@ import { ref, computed, watch, onBeforeUnmount } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getDiagnosisRecords, getDiagnosisRecord, requestDiagnosisReview, deleteDiagnosisRecord } from '@/api/agriculture'
 import { useAuthStore } from '@/stores/auth'
+import { ticketStatus } from '@/constants/agri'
 import type { ExpertTicketItem, ExpertTicketDetail } from '@/types/agriculture'
 const props = defineProps<{ fieldId?: number; version: number }>()
 const emit = defineEmits<{ deleted: [recordId: number] }>()
@@ -19,8 +20,9 @@ const transferring = ref(false)
 let alive = true
 let listVersion = 0
 let detailVersion = 0
+// 状态文案与初诊页共用一份映射（constants/agri.ts），避免两处说法不一致
 function label(status: string) {
-  return ({ preliminary: '初步记录', pending_review: '待接单', in_review: '审阅中', expert_reviewed: '已复核' } as Record<string, string>)[status] || status
+  return ticketStatus(status).label
 }
 async function load() {
   const version = ++listVersion
@@ -110,10 +112,10 @@ onBeforeUnmount(() => { alive = false; ++listVersion; ++detailVersion })
     <p>显示有权访问的已保存记录；未关联田块的单次诊断不会出现在此处。点击记录可查看最新复核结果。</p>
     <el-table :data="records" v-loading="loading" @row-click="(row: ExpertTicketItem) => select(row.ticket_id)">
       <el-table-column prop="ticket_id" label="编号" width="80" />
-      <el-table-column prop="field_name" label="田块" />
-      <el-table-column prop="initial_suspected_disease" label="初步记录名称" />
-      <el-table-column label="状态"><template #default="{ row }">{{ label(row.status) }}</template></el-table-column>
-      <el-table-column prop="expert_name" label="认领/复核人" />
+      <el-table-column prop="field_name" label="田块" min-width="100" />
+      <el-table-column prop="initial_suspected_disease" label="初步记录名称" min-width="140" />
+      <el-table-column label="状态" min-width="120"><template #default="{ row }"><el-tag size="small" :type="ticketStatus(row.status).tag">{{ label(row.status) }}</el-tag></template></el-table-column>
+      <el-table-column prop="expert_name" label="认领/复核人" min-width="100" />
       <el-table-column v-if="canDelete" label="操作" width="100">
         <template #default="{ row }">
           <el-button type="danger" link :loading="deletingId === row.ticket_id" :disabled="transferring || deletingId !== null" @click.stop="removeRecord(row)">删除</el-button>

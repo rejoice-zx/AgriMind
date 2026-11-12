@@ -3,6 +3,7 @@ import { test } from 'node:test'
 import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { Script, createContext } from 'node:vm'
+import { sharedModule, routerStub } from './shared-modules.mjs'
 const require = createRequire(new URL('../package.json', import.meta.url))
 const { parse, compileScript } = require('@vue/compiler-sfc')
 const ts = require('typescript'), vue = require('vue')
@@ -25,6 +26,8 @@ function setup(overrides = {}) {
     if (name === 'element-plus') return { ElMessage: Object.fromEntries(['success', 'error', 'warning'].map(level => [level, text => messages.push({ level, text })])) }
     if (name === '@element-plus/icons-vue') return {}
     if (name === '@/api/settings') return api
+    if (name === 'vue-router') return routerStub
+    const shared = sharedModule(name); if (shared) return shared
     throw Error(name)
   } }))
   return { state: module.exports.default.setup({}, { expose() {} }), messages, calls, dispose }
@@ -218,6 +221,7 @@ test('saving custom weather persists the contract and respects the returned key 
   const { state } = setup({ updateSettings: async body => { bodies.push(body); return { data: { agri_ai: {
     weather_provider: 'custom', weather_custom: body.agri_ai.weather_custom, has_weather_key: false,
     llm_base_url: 'https://provider.example/v1', vision_base_url: 'https://provider.example/v1' } } } } })
+  await state.loadSettings()
   state.agriAIConfig.weather_provider = 'custom'
   state.agriAIConfig.weather_custom.endpoint = 'https://weather.example/current'
   state.agriAIConfig.weather_api_key = 'synthetic-submitted-key'
@@ -225,4 +229,28 @@ test('saving custom weather persists the contract and respects the returned key 
   assert.equal(bodies[0].agri_ai.weather_custom.current_fields.timestamp, 'timestamp')
   assert.equal(state.agriAIConfig.has_weather_key, false)
   assert.equal(state.agriAIConfig.weather_api_key, '')
+})
+
+test('a failed settings read locks every save so defaults never overwrite stored configuration (P0)', async () => {
+  const saved = []
+  const { state, messages } = setup({ getSettings: async () => { throw Object.assign(Error('down'), { response: { status: 503, data: {} } }) },
+    updateSettings: async body => { saved.push(body); return { data: {} } } })
+  await state.loadSettings()
+  assert.equal(state.loadState.value, 'error')
+  assert.equal(state.formLocked.value, true)
+  await state.saveAgriAISettings(); await state.saveRAGSettings(); await state.saveGeneralSettings(); await state.saveEmbeddingSettings()
+  assert.equal(saved.length, 0)
+  assert.ok(messages.some(m => m.level === 'error' && m.text.includes('暂停编辑')))
+})
+
+test('a successful read unlocks saving and tracks unsaved changes per section', async () => {
+  const { state } = setup()
+  await state.loadSettings()
+  assert.equal(state.formLocked.value, false)
+  assert.equal(state.anyDirty.value, false)
+  state.ragConfig.topK = 9
+  assert.equal(state.dirty.value.rag, true)
+  assert.equal(state.dirty.value.agri, false)
+  await state.saveRAGSettings()
+  assert.equal(state.dirty.value.rag, false)
 })
