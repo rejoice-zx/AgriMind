@@ -98,7 +98,7 @@ async def test_assignment_required_and_resolution_immutable_with_atomic_case(env
         assert feedback.confirmed_disease == payload().confirmed_disease
         assert feedback.treatment_suggestion == payload().treatment_suggestion
         knowledge = await db.get(KnowledgeItem, first.knowledge_item_id)
-        assert knowledge.authority_level == "L4" and knowledge.source_type == "expert"
+        assert knowledge.authority_level == "L4" and knowledge.source_type == "unverified"
 
 
 @pytest.mark.asyncio

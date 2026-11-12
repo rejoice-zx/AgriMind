@@ -18,7 +18,7 @@ function harness(adapter, { guest = false, fetchImpl, publicPage = false } = {})
   const store = {
     user: guest ? null : { id: 1 }, token: guest ? 'guest-old' : 'account-old',
     refreshToken: guest ? null : 'refresh-1', sessionVersion: 1,
-    setToken(value) { this.token = value },
+    setToken(value, rotated) { this.token = value; if (rotated) this.refreshToken = rotated },
     clearAuth() { this.sessionVersion++; this.user = null; this.token = null; this.refreshToken = null; events.push('clear') },
   }
   const localStorage = { getItem: k => storage.get(k) ?? null, setItem: (k, v) => storage.set(k, v), removeItem: k => storage.delete(k) }
@@ -208,5 +208,24 @@ test('concurrent rejected guests share recovery and logout prevents a late ident
     await assert.rejects(b, env.auth.AuthSessionChangedError)
     assert.equal(issues, 1); assert.equal(env.storage.get('guest_token'), 'guest-old')
     assert.equal(env.store.token, null)
+  } finally { env.dispose() }
+})
+
+test('a successful refresh keeps the rotated refresh token for the next refresh (BUG-021)', async () => {
+  const sent = []
+  const env = harness(async config => {
+    if (config.url === '/api/auth/refresh') {
+      sent.push(JSON.parse(config.data).refresh_token)
+      return response(config, { access_token: `account-${sent.length + 1}`, refresh_token: `refresh-${sent.length + 1}` })
+    }
+    return config.headers.Authorization === `Bearer ${env.store.token}` && env.store.token !== 'account-old'
+      ? response(config, { ok: true }) : unauthorized(config)
+  })
+  try {
+    await env.request.get('/fixture/one')
+    assert.equal(env.store.refreshToken, 'refresh-2')
+    env.store.token = 'account-old'
+    await env.request.get('/fixture/two')
+    assert.deepEqual(sent, ['refresh-1', 'refresh-2'])
   } finally { env.dispose() }
 })

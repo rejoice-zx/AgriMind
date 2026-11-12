@@ -4,6 +4,7 @@ import re
 import hmac
 from typing import Optional, Tuple
 from jose import JWTError, jwt
+import asyncio
 import bcrypt
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -12,6 +13,9 @@ from fastapi import HTTPException
 
 from app.config import settings
 from app.models.user import User
+
+# Fixed bcrypt hash of a random throwaway string; only used to equalize timing for unknown usernames.
+_TIMING_DUMMY_HASH = "$2b$12$gXh.aDWdFW0Mxfsmsu73KeRSiA73hpPU2h9kyQ2lgrY3a.pkhr3C6"
 
 
 class AuthService:
@@ -185,8 +189,10 @@ class AuthService:
         user = result.scalar_one_or_none()
         
         if not user:
+            # Spend comparable time for unknown usernames so timing does not reveal accounts (BUG-018).
+            await asyncio.to_thread(AuthService.verify_password, password, _TIMING_DUMMY_HASH)
             return None
-        if not AuthService.verify_password(password, user.password_hash):
+        if not await asyncio.to_thread(AuthService.verify_password, password, user.password_hash):
             return None
         if not user.is_active or user.registration_status in ('pending', 'rejected'):
             return None
@@ -296,7 +302,7 @@ class AuthService:
         password: str,
         display_name: str,
         email: Optional[str] = None,
-        role: str = "cs",
+        role: str = "customer",
         is_active: bool = False,
         phone: Optional[str] = None,
         registration_status: Optional[str] = None
@@ -316,9 +322,10 @@ class AuthService:
         Returns:
             Created User object
         """
+        password_hash = await asyncio.to_thread(AuthService.hash_password, password)
         user = User(
             username=username,
-            password_hash=AuthService.hash_password(password),
+            password_hash=password_hash,
             display_name=display_name,
             email=email,
             role=role,

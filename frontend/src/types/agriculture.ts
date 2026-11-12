@@ -192,7 +192,9 @@ export interface AgentDecisionResponse {
   query: string
   conclusion: string
   decision_type: string
+  /** 模型自评分并按证据设上限，不是准确率；界面展示 evidence_level */
   confidence: number
+  evidence_level?: 'knowledge' | 'records_only' | 'none'
   can_proceed: boolean
   risks: string[]
   recommendations: string[]

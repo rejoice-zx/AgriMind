@@ -349,7 +349,7 @@ class TestExpertWorkbenchLifecycleAndFeedback:
         kb_item = await test_session.get(KnowledgeItem, str(resolve_res.knowledge_item_id))
         assert kb_item is not None
         assert kb_item.authority_level == "L4"
-        assert kb_item.source_type == "expert"
+        assert kb_item.source_type == "unverified"  # pending admin review before retrieval
         assert "李建国研究员" in kb_item.source_name
         assert "番茄灰霉病与生理性缺钙复合症" in kb_item.answer
 

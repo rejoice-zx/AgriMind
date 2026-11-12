@@ -86,7 +86,7 @@ async def create_farming_record(
     db: AsyncSession = Depends(get_db)
 ):
     """新增农事操作记录（施肥、灌溉、修剪、打药等）"""
-    is_admin = is_agri_staff(current_user)
+    is_admin = roles_is_admin(current_user)
     return await FarmingRecordService.create_farming_record(
         db,
         field_id=field_id,
@@ -94,19 +94,6 @@ async def create_farming_record(
         user_id=current_user.id,
         is_admin=is_admin
     )
-
-
-@router.get("/farming-records/pesticide-standards", summary="获取待核验农药历史参考候选")
-async def get_pesticide_standards(
-    query: Optional[str] = Query(None, description="农药名称关键词检索"),
-    current_user: User = Depends(get_current_user),
-):
-    """历史参考不是产品标签核验，不可自动作为作业放行依据。"""
-    from app.core.pesticide_standards import PESTICIDE_PHI_STANDARDS, lookup_pesticide_standard
-    if query:
-        matched = lookup_pesticide_standard(query)
-        return [matched] if matched else []
-    return [lookup_pesticide_standard(item["standard_name"]) for item in PESTICIDE_PHI_STANDARDS.values()]
 
 
 @router.get("/farming-records/field/{field_id}", summary="获取地块农事记录（真实安全间隔期，杜绝假数据）")
@@ -228,7 +215,7 @@ async def create_farming_record_compat(
         safety_interval_days=safety_days,
         attachments=payload.attachments or [],
     )
-    is_admin = is_agri_staff(current_user)
+    is_admin = roles_is_admin(current_user)
     record = await FarmingRecordService.create_farming_record(
         db,
         field_id=field_id,
@@ -303,11 +290,11 @@ async def create_disease_record(
     db: AsyncSession = Depends(get_db)
 ):
     """提交人工巡查记录；AI结果与专家反馈通过专用流程写入"""
-    await FarmService.ensure_field_access(db, field_id, current_user)
+    await FarmService.ensure_field_owner_writable(db, field_id, current_user)
     if disease_in.image_url:
         from app.services.diagnosis_media_service import DiagnosisMediaService
         await DiagnosisMediaService.access(db, disease_in.image_url, current_user, for_link=True, field_id=field_id)
-    is_admin = is_agri_staff(current_user)
+    is_admin = roles_is_admin(current_user)
     return await FarmingRecordService.create_disease_record(
         db,
         field_id=field_id,
@@ -341,7 +328,7 @@ async def record_weather_snapshot(
     db: AsyncSession = Depends(get_db)
 ):
     """记录田块气象快照（含地块权限校验）"""
-    await FarmService.ensure_field_access(db, field_id, current_user)
+    await FarmService.ensure_field_owner_writable(db, field_id, current_user)
     return await FarmingRecordService.record_weather_snapshot(db, field_id, weather_in)
 
 

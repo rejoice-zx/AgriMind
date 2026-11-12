@@ -1,7 +1,7 @@
 """Authentication Schemas"""
 from pydantic import BaseModel, Field, EmailStr
 from typing import Optional, List, Literal
-from app.schemas.contact import PhoneNumber
+from app.schemas.contact import PhoneNumber, PasswordText
 from datetime import datetime
 
 
@@ -21,7 +21,7 @@ class RefreshRequest(BaseModel):
 class RegisterRequest(BaseModel):
     """Registration through the compatibility endpoint; privileged roles are unavailable."""
     username: str = Field(..., min_length=3, max_length=50)
-    password: str = Field(..., min_length=6)
+    password: PasswordText
     display_name: str = Field(..., min_length=1, max_length=100)
     email: Optional[EmailStr] = None
     phone: PhoneNumber
@@ -31,7 +31,7 @@ class RegisterRequest(BaseModel):
 class CustomerRegisterRequest(BaseModel):
     """Customer registration request schema"""
     username: str = Field(..., min_length=3, max_length=50)
-    password: str = Field(..., min_length=6)
+    password: PasswordText
     display_name: str = Field(..., min_length=1, max_length=100)
     phone: PhoneNumber
     role: Literal['customer', 'expert'] = 'customer'

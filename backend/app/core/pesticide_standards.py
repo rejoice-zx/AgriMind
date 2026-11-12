@@ -1,107 +1,12 @@
 # -*- coding: utf-8 -*-
 """
-AgriMind 未核验历史农药参考候选（不作为安全期裁决依据）
+AgriMind 禁限用农药名称预警。
 
-以下配方及数值来自历史示例，尚无逐产品登记证和标签证据，不能证明规范符合性。
-仅按完整名称返回待核验候选；实际作业须核验产品标签、作物与用法。
+原先内置的 8 种药剂"历史参考"安全间隔期/剂量表来源不明、无登记证与标签证据，已删除（第三阶段）。
+安全间隔期一律以产品标签为准（《农药管理条例》第三十四条），由农户录入并经专家复核。
 """
 
-from typing import Dict, Any, List, Optional
-
-
-PESTICIDE_PHI_STANDARDS: Dict[str, Dict[str, Any]] = {
-    "精甲霜·锰锌": {
-        "standard_name": "68% 精甲霜·锰锌 水分散粒剂",
-        "active_ingredients": ["精甲霜灵 4%", "代森锰锌 64%"],
-        "target_diseases": ["番茄晚疫病", "番茄早疫病", "绵疫病"],
-        "safety_interval_days": 7,
-        "max_applications_per_season": 3,
-        "dosage_range": "100~120 g/亩",
-        "dilution_ratio": "500~800 倍液",
-        "caution": "治疗兼保护性杀菌剂。降雨前禁止施药；每季最多施用3次，严格遵守7天安全间隔期以防鲜果农残超标。"
-    },
-    "代森锰锌": {
-        "standard_name": "80% 代森锰锌 可湿性粉剂",
-        "active_ingredients": ["代森锰锌 80%"],
-        "target_diseases": ["番茄早疫病", "晚疫病", "炭疽病", "叶霉病"],
-        "safety_interval_days": 15,
-        "max_applications_per_season": 3,
-        "dosage_range": "130~160 g/亩",
-        "dilution_ratio": "600~800 倍液",
-        "caution": "保护性广谱杀菌剂，需在发病前或初见病斑时喷雾；安全间隔期较长(15天)，采收盛期禁止喷洒！"
-    },
-    "嘧菌酯": {
-        "standard_name": "250克/升 嘧菌酯 悬浮剂",
-        "active_ingredients": ["嘧菌酯 250g/L"],
-        "target_diseases": ["番茄白粉病", "早疫病", "叶霉病", "炭疽病"],
-        "safety_interval_days": 3,
-        "max_applications_per_season": 2,
-        "dosage_range": "40~60 ml/亩",
-        "dilution_ratio": "1000~1500 倍液",
-        "caution": "甲氧基丙烯酸酯类杀菌剂，极易产生抗药性，每季最多使用2次；安全间隔期短(3天)，适合果实膨大转色期防控。"
-    },
-    "腐霉利": {
-        "standard_name": "50% 腐霉利 可湿性粉剂",
-        "active_ingredients": ["腐霉利 (速克灵) 50%"],
-        "target_diseases": ["番茄灰霉病", "菌核病"],
-        "safety_interval_days": 7,
-        "max_applications_per_season": 2,
-        "dosage_range": "60~100 g/亩",
-        "dilution_ratio": "1000~1500 倍液",
-        "caution": "灰霉病专用内吸杀菌剂；花期严禁高浓度喷淋花蕊；严格遵守7天安全间隔期。"
-    },
-    "异菌脲": {
-        "standard_name": "500克/升 异菌脲 悬浮剂",
-        "active_ingredients": ["异菌脲 500g/L"],
-        "target_diseases": ["番茄早疫病", "灰霉病", "叶霉病"],
-        "safety_interval_days": 7,
-        "max_applications_per_season": 3,
-        "dosage_range": "50~80 ml/亩",
-        "dilution_ratio": "1000~1200 倍液",
-        "caution": "二甲酰亚胺类触杀性杀菌剂，耐雨水冲刷性中等，安全间隔期为7天。"
-    },
-    "百菌清": {
-        "standard_name": "75% 百菌清 可湿性粉剂",
-        "active_ingredients": ["百菌清 75%"],
-        "target_diseases": ["番茄早疫病", "晚疫病", "灰霉病", "叶斑病"],
-        "safety_interval_days": 7,
-        "max_applications_per_season": 3,
-        "dosage_range": "110~150 g/亩",
-        "dilution_ratio": "500~600 倍液",
-        "caution": "非内吸长效保护剂，需均匀覆盖叶面正反面；雨前不宜施用。"
-    },
-    "春雷霉素": {
-        "standard_name": "2% 春雷霉素 水剂",
-        "active_ingredients": ["春雷霉素 2%"],
-        "target_diseases": ["番茄叶霉病", "细菌性斑疹病", "溃疡病"],
-        "safety_interval_days": 3,
-        "max_applications_per_season": 3,
-        "dosage_range": "100~120 ml/亩",
-        "dilution_ratio": "400~500 倍液",
-        "caution": "农用生物抗生素，安全低残留，安全间隔期为3天，适合绿色无公害蔬菜生产。"
-    },
-    "氟啶胺": {
-        "standard_name": "500克/升 氟啶胺 悬浮剂",
-        "active_ingredients": ["氟啶胺 500g/L"],
-        "target_diseases": ["番茄晚疫病", "灰霉病"],
-        "safety_interval_days": 5,
-        "max_applications_per_season": 2,
-        "dosage_range": "30~40 ml/亩",
-        "dilution_ratio": "1500~2000 倍液",
-        "caution": "强效广谱杀菌剂，禁止与乳油类农药及有机硅助剂混用以防产生药害。"
-    }
-}
-
-
-def lookup_pesticide_standard(query_name: str) -> Optional[Dict[str, Any]]:
-    """Exact full-name candidate lookup only; never registration or PHI approval."""
-    if not query_name:
-        return None
-    q = "".join(query_name.split()).lower()
-    for val in PESTICIDE_PHI_STANDARDS.values():
-        if "".join(val["standard_name"].split()).lower() == q:
-            return {**val, "verification_status": "unverified", "notice": "历史参考候选，须另核验登记证、产品标签、作物与用法"}
-    return None
+from typing import List, Optional
 
 
 # 蔬菜/茄果类作物法定禁限用高毒农药负面清单 (全量依据农业农村部公告第 199/274/2032/2567 号、NY/T 393-2020 及《农药管理条例》)
@@ -114,7 +19,10 @@ BANNED_PESTICIDES_CATALOG: List[str] = [
     "甲拌磷", "甲基异柳磷", "克百威", "呋喃丹", "水胺硫磷", "氧乐果", "灭多威",
     "涕灭威", "神农丹", "克线磷", "内吸磷", "硫环磷", "毒死蜱", "三唑磷",
     # 农业部公告第2552号：2019-08-01起禁止用于蔬菜等作物，含复配制剂。
-    "乙酰甲胺磷", "丁硫克百威", "乐果"
+    "乙酰甲胺磷", "丁硫克百威", "乐果",
+    # 2024 年禁限用名录（福建省农业农村厅转载）列明禁止用于蔬菜：氯唑磷；
+    # 灭线磷自 2024-09-01 起禁止销售和使用。名单仍需按农业农村部最新附件逐项复核。
+    "氯唑磷", "灭线磷",
 ]
 
 # 相近名称子串保护，不代表登记、标签或适用范围已核验

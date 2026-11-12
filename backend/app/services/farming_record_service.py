@@ -214,6 +214,8 @@ class FarmingRecordService:
         farm = (await db.execute(select(Farm).where(Farm.id == field.farm_id))).scalars().first()
         if not is_admin and farm.owner_id != user_id:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权操作该地块的病害记录")
+        from app.services.farm_service import FarmService
+        FarmService.assert_writable(field, farm)
 
         if disease_in.crop_planting_id is not None:
             from app.models.crop import CropPlanting

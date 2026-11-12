@@ -17,7 +17,6 @@ import {
   Warning,
   CircleCheck,
   CircleClose,
-  Document,
   Timer,
   InfoFilled,
   Picture,
@@ -282,9 +281,9 @@ async function initData() {
     id: 'welcome',
     role: 'agent',
     time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-    content: `👋 您好！我是 AgriMind 农业智能决策 Agent。
+    content: `👋 您好！我是 AgriMind 农业资料分析助手，负责整理信息、提示风险并转交专家，不出具农艺处方。
 请选择您的真实田块。我会依据已录入档案、可用天气与知识库分析；缺少数据时会明确说明。
-您可以点击输入框上方的快捷提问，或直接输入关于病害防治、用药禁忌、水肥配方与物候积温的任何咨询！`
+目前知识库中还没有已核验的资料来源，回答会标注依据等级；施药、施肥、采收与诊断问题会转交农技专家复核。`
   })
 }
 
@@ -438,9 +437,11 @@ function scrollToBottom() {
   })
 }
 
-// 格式化置信度百分比
-function formatConfidence(conf: number) {
-  return `${Math.round(conf * 100)}%`
+// 依据等级：模型自评分不是准确率，界面只展示实际取得的依据类型（BUG-011）
+function evidenceLevelLabel(level?: string) {
+  if (level === 'knowledge') return '有知识库候选资料（待核验）'
+  if (level === 'records_only') return '仅有田块/天气/履历记录'
+  return '无资料依据，需专家判断'
 }
 
 // ==================== 响应式侧栏与自适应布局 ====================
@@ -512,7 +513,7 @@ onBeforeUnmount(() => {
       <div class="sidebar-header">
         <span class="sidebar-title"><el-icon><MapLocation /></el-icon>田块时空上下文</span>
         <div class="header-tags">
-          <el-tag size="small" type="success" effect="plain">自动注入</el-tag>
+          <el-tag size="small" type="info" effect="plain">随提问附带</el-tag>
           <el-button
             v-if="isCompact"
             circle
@@ -605,10 +606,10 @@ onBeforeUnmount(() => {
           <div class="agent-avatar"><el-icon><Cpu /></el-icon></div>
           <div class="agent-info-text">
             <div class="agent-name-row">
-              <span class="agent-name">AgriMind 农业智能决策协同中枢</span>
-              <el-tag type="success" size="small" effect="light" class="react-tag">多工具协同 ReAct 模式</el-tag>
+              <span class="agent-name">AgriMind 农业资料分析助手</span>
+              <el-tag type="info" size="small" effect="light" class="react-tag">固定流程 · 按需调用工具</el-tag>
             </div>
-            <div class="agent-desc">支持气象安全硬阻断 · 科学水肥建议 · 国家标准溯源 · 工具链全流程透明审计</div>
+            <div class="agent-desc">整理田块档案、天气参考与农事履历 · 检索知识库候选 · 禁用药与天气风险提示 · 工具调用记录可查</div>
           </div>
         </div>
 
@@ -664,7 +665,7 @@ onBeforeUnmount(() => {
             <!-- 普通文字回复或加载中 -->
             <div v-if="msg.loading" class="loading-bubble">
               <el-icon class="is-loading" style="font-size: 18px"><RefreshRight /></el-icon>
-              <span>正在自主协同多工具分析地块档案、微气象预警与国标防治规程...</span>
+              <span>正在依次读取田块档案、天气参考、农事履历并检索知识库候选...</span>
             </div>
 
             <div v-else-if="msg.content" class="text-bubble">
@@ -692,8 +693,8 @@ onBeforeUnmount(() => {
                 </div>
 
                 <div class="confidence-badge">
-                  <span class="conf-label">置信度</span>
-                  <span class="conf-val">{{ formatConfidence(msg.decision.confidence) }}</span>
+                  <span class="conf-label">依据等级</span>
+                  <span class="conf-val">{{ evidenceLevelLabel(msg.decision.evidence_level) }}</span>
                 </div>
               </div>
 
@@ -726,11 +727,11 @@ onBeforeUnmount(() => {
                 </div>
               </div>
 
-              <!-- 技术依据与国标标准展开 -->
+              <!-- 分析依据展开（来源为录入标注） -->
               <el-collapse class="details-collapse">
                 <el-collapse-item name="evidences">
                   <template #title>
-                    <span class="collapse-title"><el-icon><Reading /></el-icon>支撑依据与国家标准 (GB/T) 溯源</span>
+                    <span class="collapse-title"><el-icon><Reading /></el-icon>分析依据（来源为录入标注，未自动核验）</span>
                   </template>
                   <div v-if="msg.decision.evidences && msg.decision.evidences.length > 0" class="evidences-list">
                     <div
@@ -758,7 +759,7 @@ onBeforeUnmount(() => {
                     >
                       <div class="trace-header">
                         <span class="trace-tool-name"><code>{{ trace.tool_name }}</code></span>
-                        <el-tag size="small" type="success">{{ trace.status }}</el-tag>
+                        <el-tag size="small" :type="trace.status === 'success' ? 'success' : 'danger'">{{ trace.status === 'success' ? '成功' : '失败' }}</el-tag>
                       </div>
                       <div class="trace-body">
                         <div class="trace-sub"><span class="tk">入参:</span> <code>{{ JSON.stringify(trace.arguments) }}</code></div>
@@ -927,15 +928,6 @@ onBeforeUnmount(() => {
         </div>
       </div>
 
-      <!-- 物候有效积温 GDD 预测 -->
-      <div class="side-card">
-        <div class="side-card-title">
-          <el-icon><Document /></el-icon>
-          <span>有效积温 (GDD) 采收预测</span>
-        </div>
-
-        <p>尚缺定植以来完整历史温度序列，当前无法计算累计有效积温或预测采收天数。</p>
-      </div>
     </aside>
   </div>
 </template>

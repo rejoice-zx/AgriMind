@@ -32,7 +32,7 @@ function environment({ memory = new Map(), list = [{ id: 1 }, { id: 2 }], storag
   const store = storeModule.useFarmSelectionStore(root)
   return { store, auth, api, memory, dispose: () => store.$dispose() }
 }
-function view(name, env, extraApi = {}) {
+function view(name, env, extraApi = {}, messages = []) {
   const { descriptor } = parse(readFileSync(new URL(`../src/views/${name}.vue`, import.meta.url), 'utf8'))
   const fieldCalls = []
   const api = {
@@ -49,7 +49,7 @@ function view(name, env, extraApi = {}) {
     '@/utils/scopedDraft': { draftOwnerKey: user => user ? String(user.id) : undefined, saveScopedDraft: () => false, readScopedDraft: () => null },
     '@/utils/requestId': { newRequestId: () => '00000000-0000-4000-8000-000000000001' },
     'vue-router': { useRouter: () => ({}) }, '@element-plus/icons-vue': {},
-    'element-plus': { ElMessage: { error() {}, warning() {}, success() {} } }
+    'element-plus': { ElMessage: Object.fromEntries(['error', 'warning', 'success', 'info'].map(level => [level, text => messages.push({ level, text })])) }
   }).default.setup({}, { expose() {} }))
   return { state, fieldCalls, dispose: () => scope.stop() }
 }
@@ -189,3 +189,24 @@ for (const [name, init, records] of [['Dashboard', 'initDashboard', 'recentRecor
     page.dispose(); env.dispose()
   })
 }
+
+test('calendar save that succeeds but fails to refresh never reports a failed save (BUG-026)', async () => {
+  const env = environment(); await env.store.loadFarms()
+  let created = 0
+  const messages = []
+  const page = view('FarmingCalendar', env, {
+    createFarmingRecord: async () => { created++; return { data: { id: 1, replayed: false } } },
+    getFarmingRecords: async () => { throw new Error('network') },
+  }, messages)
+  const { state } = page
+  state.selectedFieldId.value = 5
+  state.recordForm.value = { field_id: 5, record_type: 'inspection', operation_date: '2026-10-12', operation_content: '巡视' }
+  await state.submitRecord()
+  assert.equal(created, 1)
+  assert.equal(state.recordSaving.value, false)
+  // The dialog closes as for any successful save; a failed list refresh is only a warning.
+  assert.equal(state.recordDialogVisible.value, false)
+  assert.ok(!messages.some(m => m.level === 'error' && m.text.includes('保存失败')), JSON.stringify(messages))
+  assert.ok(messages.some(m => m.level === 'warning' && m.text.includes('已保存')))
+  page.dispose(); env.dispose()
+})

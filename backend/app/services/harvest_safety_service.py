@@ -17,10 +17,13 @@ async def harvest_safety(db, field_id, crop_planting_id=None):
         (FarmingRecord.crop_planting_id.is_(None)) & (FarmingRecord.record_date >= crop.planting_date))))).all()
     reasons, records, dates = [], [], []
     for row in rows:
+        # Banned names can appear in any record type or in the free-text description (BUG-031).
+        banned = find_all_banned_pesticides(f"{row.input_name or ''} {row.description or ''}")
+        if banned and not is_spraying_record(row.record_type):
+            reasons.append(f'记录#{row.id}含禁限用成分名称：' + '、'.join(banned))
         if not is_spraying_record(row.record_type):
             continue
         phi = row.safety_interval_days
-        banned = find_all_banned_pesticides(row.input_name or '')
         if banned: reasons.append('记录含番茄禁限用成分：' + '、'.join(banned))
         if phi is None or phi < 0: reasons.append(f'记录#{row.id}安全间隔期未知')
         else:

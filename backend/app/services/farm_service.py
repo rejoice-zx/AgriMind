@@ -33,6 +33,19 @@ class FarmService:
         return field
 
     @staticmethod
+    async def ensure_field_owner_writable(db, field_id, user):
+        """Owner-or-admin write to the farm's own history; experts read and answer through review receipts."""
+        field = await FarmService.get_field_by_id(db, field_id)
+        if not field:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="地块不存在")
+        farm = await FarmService.get_farm_by_id(db, field.farm_id)
+        if getattr(user, "role", "") != "admin" and (not farm or farm.owner_id != getattr(user, "id", None)):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
+                                detail="只有田块所有者或管理员可以写入农事履历；专家意见请通过复核回执提交")
+        FarmService.assert_writable(field, farm)
+        return field
+
+    @staticmethod
     async def set_archive(db, asset_type, asset_id, archived, user):
         asset = (await FarmService.ensure_farm_access(db, asset_id, user) if asset_type == 'farm'
                  else await FarmService.ensure_field_access(db, asset_id, user))
@@ -386,6 +399,18 @@ class FarmService:
             raise HTTPException(422, '作物、阶段、面积和状态不能为空')
         if crop.status != 'active' and update_data.get('status') == 'active':
             raise HTTPException(409, '结束批次必须通过填写原因的恢复入口重新启用，普通编辑不能恢复')
+        # Ended batches are history; only their status may move between ended states (BUG-015).
+        if crop.status != 'active' and set(update_data) - {'status'}:
+            raise HTTPException(409, '已结束的批次只能查看；如需修改档案，请先通过恢复入口填写原因')
+        if 'planting_date' in update_data and update_data['planting_date'] != crop.planting_date:
+            from sqlalchemy import or_ as _or
+            from app.models.farming_record import FarmingRecord, is_spraying_record
+            rows = (await db.execute(select(FarmingRecord.record_type).where(
+                FarmingRecord.field_id == crop.field_id, FarmingRecord.revoked_at.is_(None),
+                _or(FarmingRecord.crop_planting_id == crop.id, FarmingRecord.crop_planting_id.is_(None))))).scalars().all()
+            # The planting date decides which unbound spray records count toward harvest-safety checks.
+            if any(is_spraying_record(kind) for kind in rows):
+                raise HTTPException(409, '本批次已有施药记录参与采收安全核查，不能修改种植日期；如录入有误请联系管理员核对')
         if 'status' in update_data and update_data['status'] != crop.status:
             from app.models import User, CropStatusEvent
             from app.utils.time import utcnow

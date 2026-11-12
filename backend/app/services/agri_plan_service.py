@@ -34,15 +34,16 @@ class PlanApplyResult:
 
 class AgriPlanService:
     @staticmethod
-    async def _field(db, field_id, user_id, user_role):
+    async def _field(db, field_id, user_id, user_role, write=False):
         field = (await db.execute(select(Field).where(Field.id == field_id))).scalars().first()
         if not field:
             raise HTTPException(404, '田块不存在')
         farm = (await db.execute(select(Farm).where(Farm.id == field.farm_id))).scalars().first()
         if not farm:
             raise HTTPException(404, '所属农场不存在')
-        if user_role not in ('admin', 'expert') and farm.owner_id != user_id:
-            raise HTTPException(403, '无权限操作此田块')
+        readers = ('admin',) if write else ('admin', 'expert')
+        if user_role not in readers and farm.owner_id != user_id:
+            raise HTTPException(403, '只有田块所有者或管理员可以确认执行记录' if write else '无权限操作此田块')
         from app.services.farm_service import FarmService
         FarmService.assert_writable(field, farm)
         return field
@@ -240,7 +241,7 @@ class AgriPlanService:
 
     @classmethod
     async def apply_plan_items(cls, db: AsyncSession, field_id: int, items: List[PlanItem], operator: str, user_id: int, user_role: str) -> PlanApplyResult:
-        field = await cls._field(db, field_id, user_id, user_role)
+        field = await cls._field(db, field_id, user_id, user_role, write=True)
         planting_ids = {item.crop_planting_id for item in items}
         if len(planting_ids) != 1 or None in planting_ids:
             raise HTTPException(409, '请一次确认同一明确作物批次的计划，刷新后再试')

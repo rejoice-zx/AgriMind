@@ -37,6 +37,20 @@ def prepare_key(configured, key_path, has_v3, initialize=False):
     return key
 
 
+def configured_environment(root):
+    for name in ('APP_ENV', 'ENV'):
+        if os.environ.get(name, '').strip():
+            return os.environ[name].strip()
+    from dotenv import dotenv_values
+    for path in (root / '.env', root / 'backend' / '.env'):
+        if path.exists():
+            values = dotenv_values(path)
+            for name in ('APP_ENV', 'ENV'):
+                if (values.get(name) or '').strip():
+                    return values[name].strip()
+    return None
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--initialize-encryption', action='store_true')
@@ -44,7 +58,10 @@ def main():
     args = parser.parse_args()
     root = Path(__file__).resolve().parents[1]
     sys.path.insert(0, str(root / 'backend'))
-    os.environ.setdefault('APP_ENV', 'development')
+    # Default to development only when neither the process nor a local .env names an environment;
+    # a configured APP_ENV=production must keep its startup protections (BUG-007).
+    if not configured_environment(root):
+        os.environ['APP_ENV'] = 'development'
     from app.config import settings
     from sqlalchemy.engine import make_url
     url = make_url(settings.DATABASE_URL)

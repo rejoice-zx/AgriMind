@@ -178,16 +178,18 @@ async def test_agent_archivable_trace_and_llm_knowledge_context_are_bounded(test
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("query,blocked", [("现在可以施肥吗？", True), ("叶片发黄需要诊断", True), ("一般农业资料是什么？", False)])
-async def test_missing_applicable_knowledge_cannot_become_risky_model_approval(test_session, monkeypatch, query, blocked):
+@pytest.mark.parametrize("query,gap", [("现在可以施肥吗？", True), ("叶片发黄需要诊断", True), ("一般农业资料是什么？", False)])
+async def test_missing_applicable_knowledge_cannot_become_risky_model_approval(test_session, monkeypatch, query, gap):
     await configured(test_session)
     async def synthesize(**kwargs):
         return {"conclusion": "模型建议执行", "can_proceed": True, "confidence": 0.99, "need_expert": False,
                 "recommendations": ["立即执行"], "risks": []}
     monkeypatch.setattr(AgriAgentService, "_synthesize_with_llm", synthesize)
     result = await AgriAgentService.decide(test_session, AgentDecisionRequest(query=query))
-    assert result.can_proceed is (not blocked)
-    if blocked:
+    # BUG-013: without knowledge evidence nothing is approved, general questions included.
+    assert result.can_proceed is False and result.evidence_level != "knowledge"
+    assert any("没有满足条件的已核验资料" in risk for risk in result.risks)
+    if gap:
         assert result.need_expert and "知识依据不足" in result.conclusion
         assert "立即执行" not in result.recommendations
 

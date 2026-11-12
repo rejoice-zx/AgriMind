@@ -37,16 +37,27 @@ async def test_can_proceed_requires_real_boolean(test_session, farm_env, mock_ex
     assert decision.can_proceed is False
 
 
+async def _add_general_knowledge(test_session, farm_env):
+    from app.models.knowledge import KnowledgeItem
+    from app.services.settings_service import SettingsService, RAGConfig
+    test_session.add(KnowledgeItem(id="general_applicable_fixture", question="番茄种植需要注意哪些要点", answer="测试资料，需现场核对",
+        crop=farm_env["crop"].crop, region="全国", source_type="test_fixture", source_name="隔离测试资料", authority_level="L4"))
+    await test_session.commit()
+    await SettingsService.set_rag_config(test_session, RAGConfig(similarity_threshold=0.0))
+
+
 @pytest.mark.asyncio
-async def test_true_boolean_still_allows_non_spray(test_session, farm_env, mock_external_services, monkeypatch):
+async def test_true_boolean_allows_non_spray_only_with_knowledge(test_session, farm_env, mock_external_services, monkeypatch):
     monkeypatch.setattr(AgriAgentService, "_synthesize_with_llm", _synth({
         "can_proceed": True, "conclusion": "x", "confidence": 0.9,
         "risks": [], "recommendations": [], "need_expert": False,
     }))
-    decision = await AgriAgentService.decide(
-        test_session, AgentDecisionRequest(query=GENERAL_QUERY, field_id=farm_env["field"].id),
-        current_user=farm_env["farmer"])
-    assert decision.can_proceed is True
+    request = AgentDecisionRequest(query=GENERAL_QUERY, field_id=farm_env["field"].id)
+    without = await AgriAgentService.decide(test_session, request, current_user=farm_env["farmer"])
+    assert without.can_proceed is False and without.evidence_level == "records_only"  # BUG-013
+    await _add_general_knowledge(test_session, farm_env)
+    decision = await AgriAgentService.decide(test_session, request, current_user=farm_env["farmer"])
+    assert decision.can_proceed is True and decision.evidence_level == "knowledge"
 
 
 @pytest.mark.asyncio
@@ -60,7 +71,8 @@ async def test_confidence_must_be_finite_and_in_range(test_session, farm_env, mo
     decision = await AgriAgentService.decide(
         test_session, AgentDecisionRequest(query=GENERAL_QUERY, field_id=farm_env["field"].id),
         current_user=farm_env["farmer"])
-    assert decision.confidence == 0.60
+    # Invalid self-ratings fall back to 0.60, then the evidence cap (no knowledge → ≤0.5) applies.
+    assert decision.confidence <= 0.60 and decision.need_expert is True
 
 
 @pytest.mark.asyncio
@@ -69,6 +81,11 @@ async def test_confidence_valid_value_preserved(test_session, farm_env, mock_ext
         "can_proceed": True, "conclusion": "x", "confidence": 0.93,
         "risks": [], "recommendations": [], "need_expert": False,
     }))
+    decision = await AgriAgentService.decide(
+        test_session, AgentDecisionRequest(query=GENERAL_QUERY, field_id=farm_env["field"].id),
+        current_user=farm_env["farmer"])
+    assert decision.confidence == 0.5  # BUG-011: self-rating capped when no knowledge evidence exists
+    await _add_general_knowledge(test_session, farm_env)
     decision = await AgriAgentService.decide(
         test_session, AgentDecisionRequest(query=GENERAL_QUERY, field_id=farm_env["field"].id),
         current_user=farm_env["farmer"])
@@ -84,7 +101,7 @@ async def test_non_object_model_output_degrades_conservatively(test_session, far
         test_session, AgentDecisionRequest(query=GENERAL_QUERY, field_id=farm_env["field"].id),
         current_user=farm_env["farmer"])
     assert decision.can_proceed is False             # non-object degrades conservatively
-    assert decision.confidence == 0.60
+    assert decision.confidence <= 0.60
 
 
 @pytest.mark.asyncio

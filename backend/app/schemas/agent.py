@@ -101,7 +101,7 @@ class AgentDecisionResponse(BaseModel):
     query: str
     conclusion: str = Field(..., description="核心研判结论与裁决")
     decision_type: str = Field(..., description="决策类型：SPRAY_DECISION / FERTILIZATION / DIAGNOSIS / GDD_PREDICTION / GENERAL")
-    confidence: float = Field(..., description="综合决策置信度(0.0-1.0)")
+    confidence: float = Field(..., description="模型自评分(0.0-1.0)，并按实际证据设上限；不是经校准的准确率")
     can_proceed: bool = Field(True, description="是否允许/建议执行此项农事操作（如遇恶劣天气或药害风险则为False）")
     risks: List[str] = Field(default_factory=list, description="潜在农事与灾害风险清单")
     recommendations: List[str] = Field(default_factory=list, description="具体可落地的操作与技术指导建议")
@@ -109,6 +109,7 @@ class AgentDecisionResponse(BaseModel):
     tool_traces: List[ToolTrace] = Field(default_factory=list, description="Agent 调用工具的详细追踪记录")
     need_expert: bool = Field(False, description="是否需要转交农技专家复核")
     expert_reason: Optional[str] = Field(None, description="触发专家介入的原因（低置信度/高风险/疑似疑难病害等）")
+    evidence_level: str = Field("none", description="依据等级：knowledge（有知识库候选）/ records_only（仅田块、天气或履历）/ none")
     total_duration_ms: float = Field(0.0, description="Agent决策链路端到端物理耗时(毫秒)")
     conversation_id: Optional[str] = None
     turn_id: Optional[str] = None

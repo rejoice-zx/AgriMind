@@ -20,10 +20,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.core.pesticide_standards import (
     BANNED_PESTICIDES_CATALOG,
-    PESTICIDE_PHI_STANDARDS,
     check_banned_pesticide,
     find_all_banned_pesticides,
-    lookup_pesticide_standard,
 )
 from app.models.knowledge import KnowledgeItem
 from app.models.product import Product
@@ -86,46 +84,6 @@ class TestBannedPesticidesCatalog:
         assert check_banned_pesticide("") is None
         assert check_banned_pesticide("   ") is None
         assert find_all_banned_pesticides("") == []
-
-
-# ============================================================================
-# 2. 8 种国家登记农药安全间隔期 (PHI) 数据契约
-# ============================================================================
-
-class TestStandardPesticidePHIData:
-    """8 种国家登记农药安全间隔期 (PHI) 匹配与参数校验"""
-
-    @pytest.mark.parametrize("name,expected_phi", [
-        ("精甲霜·锰锌", 7),
-        ("代森锰锌", 15),
-        ("嘧菌酯", 3),
-        ("腐霉利", 7),
-        ("异菌脲", 7),
-        ("百菌清", 7),
-        ("春雷霉素", 3),
-        ("氟啶胺", 5),
-    ])
-    def test_standard_phi_days_exact_match(self, name: str, expected_phi: int):
-        """候选数值保留但必须标为未核验；简写不再匹配具体产品。"""
-        assert lookup_pesticide_standard(name) is None
-        std = lookup_pesticide_standard(PESTICIDE_PHI_STANDARDS[name]['standard_name'])
-        assert std is not None
-        assert std['verification_status'] == 'unverified'
-        assert std["safety_interval_days"] == expected_phi
-        assert len(std["active_ingredients"]) >= 1
-        assert len(std["target_diseases"]) >= 1
-
-    def test_fuzzy_lookup_by_trade_or_full_name(self):
-        """只有完整剂型名称返回未核验候选；别名不能继承其他剂型的PHI。"""
-        res1 = lookup_pesticide_standard("68% 精甲霜·锰锌 水分散粒剂")
-        assert res1 is not None
-        assert res1["standard_name"].startswith("68% 精甲霜·锰锌")
-
-        res2 = lookup_pesticide_standard("速克灵烟剂")
-        assert res2 is None
-
-        res3 = lookup_pesticide_standard("不存在的火星药剂XYZ")
-        assert res3 is None
 
 
 # ============================================================================

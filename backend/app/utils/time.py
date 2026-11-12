@@ -22,7 +22,9 @@ class UTCDateTime(TypeDecorator):
     cache_ok = True
 
     def process_bind_param(self, value, dialect):
-        # 写入时保持原样（SQLite 会存为文本）
+        # 带时区的值先换算为 UTC 再去掉 tzinfo；否则 +08:00 会按本地时刻存储，读回时偏移 8 小时（BUG-016）
+        if value is not None and getattr(value, "tzinfo", None) is not None:
+            return value.astimezone(timezone.utc).replace(tzinfo=None)
         return value
 
     def process_result_value(self, value, dialect):

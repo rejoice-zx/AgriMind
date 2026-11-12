@@ -43,7 +43,8 @@ export function refreshAccessToken(): Promise<string> {
       }
       const accessToken = res.data?.access_token
       if (typeof accessToken !== 'string' || !accessToken) throw new Error('invalid refresh response')
-      authStore.setToken(accessToken)
+      const rotated = res.data?.refresh_token
+      authStore.setToken(accessToken, typeof rotated === 'string' && rotated ? rotated : undefined)
       return accessToken
     }, (error) => {
       if (authStore.sessionVersion !== version || authStore.refreshToken !== refreshToken) {

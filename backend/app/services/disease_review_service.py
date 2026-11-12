@@ -196,7 +196,9 @@ class DiseaseReviewService:
         knowledge_id = "kb_" + uuid4().hex
         item = KnowledgeItem(id=knowledge_id, question=f"病害记录#{record.id}的专家复核：{payload.confirmed_disease}",
             answer=f"复核结论：{payload.confirmed_disease}\n处置建议：{payload.treatment_suggestion}\n复核说明：{payload.notes or '未填写'}",
-            keywords=[payload.confirmed_disease, "专家复核"], category="专家案例", source_type="expert",
+            keywords=[payload.confirmed_disease, "专家复核"], category="专家案例",
+            # Pending administrator review: unverified sources are excluded from retrieval (BUG-009).
+            source_type="unverified",
             source_name=f"专家账号【{user.display_name or user.username}】复核记录", authority_level="L4", is_current=1,
             crop=crop.crop if crop else None, growth_stage=crop.growth_stage if crop else None,
             topic="disease", disease=payload.confirmed_disease, version="v1.0")
@@ -209,7 +211,7 @@ class DiseaseReviewService:
             confirmed_disease=review.resolved_payload["confirmed_disease"],
             treatment_suggestion=review.resolved_payload["treatment_suggestion"], expert_case_id=review.result_case_id,
             knowledge_item_id=review.knowledge_item_id,
-            feedback_message="复核已保存，所属农户可在病害记录中查看。" + ("已保存L4专家案例；未自动重建向量索引。" if review.knowledge_item_id else ""))
+            feedback_message="复核已保存，所属农户可在病害记录中查看。" + ("已保存为待审核专家案例（未核验），管理员在知识库审核并改为专家来源后才会进入检索。" if review.knowledge_item_id else ""))
 
     @staticmethod
     async def release_expert(db, user_id):

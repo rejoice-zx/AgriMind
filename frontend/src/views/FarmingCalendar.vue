@@ -291,14 +291,22 @@ async function submitRecord() {
     } else if (owner === draftOwnerKey(auth.user) && submitted.field_id === selectedFieldId.value && recordForm.value.request_id === submitted.request_id) {
       recordForm.value.request_id = newRequestId()
     }
-    // 刷新记录
-    if (selectedFieldId.value === submitted.field_id) {
-      const recRes = await getFarmingRecords(selectedFieldId.value)
-      farmingRecords.value = recRes.data || []
-      void fetchPlan(selectedFieldId.value)
-    }
   } catch (err: any) {
     ElMessage.error('保存失败: ' + (err.response?.data?.detail || err.message))
+    recordSaving.value = false
+    return
+  }
+  // 保存已成功；刷新失败不能再提示“保存失败”，否则用户会重复登记（BUG-026）
+  try {
+    if (selectedFieldId.value === submitted.field_id) {
+      const recRes = await getFarmingRecords(submitted.field_id)
+      if (selectedFieldId.value === submitted.field_id) {
+        farmingRecords.value = recRes.data || []
+        void fetchPlan(submitted.field_id)
+      }
+    }
+  } catch {
+    ElMessage.warning('记录已保存，但履历列表刷新失败，请稍后手动刷新核对')
   } finally { recordSaving.value = false }
 }
 

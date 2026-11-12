@@ -30,7 +30,7 @@ class AgriRetrievalService:
     effective_on = staticmethod(effective_on)
 
     @classmethod
-    async def search(cls, db, query, metadata=None, top_k=None, threshold=None):
+    async def search(cls, db, query, metadata=None, top_k=None, threshold=None, preferred_stage=None):
         config, origin = await cls.config(db)
         if top_k is not None and (isinstance(top_k, bool) or not isinstance(top_k, int) or not 1 <= top_k <= 20):
             raise HTTPException(422, "top_k必须是1至20的整数")
@@ -69,7 +69,7 @@ class AgriRetrievalService:
         compatible, vector_reason = vector_service.compatibility()
         result = await rag.hybrid_search(query=query, knowledge_items=candidates,
             filter_metadata=filters, top_k=effective_k, threshold=effective_threshold, strict_threshold=True,
-            eligibility_date=today)
+            eligibility_date=today, preferred_stage=preferred_stage)
         configured = config.model_dump()
         trace = {
             "config_origin": origin,
@@ -77,7 +77,7 @@ class AgriRetrievalService:
             "configured_parameters": configured,
             "effective_parameters": {"top_k": effective_k, "similarity_threshold": effective_threshold,
                 "use_rewrite": config.use_rewrite, "max_context_length": config.max_context_length},
-            "filter_metadata": filters, "eligibility_date": today.isoformat(),
+            "filter_metadata": filters, "preferred_stage": preferred_stage, "eligibility_date": today.isoformat(),
             "current_rows_in_scope": len(rows), "eligible_candidates": len(eligible),
             "excluded_by_dates": len(rows) - len(dated), "excluded_by_source": len(dated) - len(eligible), "context_chars": len(result.context_text),
             "retrieval_path": result.retrieval_path,

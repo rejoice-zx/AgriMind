@@ -1,4 +1,5 @@
 """Authentication API Endpoints"""
+import asyncio
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -74,7 +75,7 @@ async def login(
     
     if not user:
         candidate = await AuthService.get_user_by_username(db, request.username)
-        if candidate and candidate.registration_status in ('pending', 'rejected') and AuthService.verify_password(request.password, candidate.password_hash):
+        if candidate and candidate.registration_status in ('pending', 'rejected') and await asyncio.to_thread(AuthService.verify_password, request.password, candidate.password_hash):
             detail = '账号申请已提交管理员审核，审核通过后才能登录' if candidate.registration_status == 'pending' else '注册申请未通过管理员审核，请联系管理员'
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=detail)
         raise HTTPException(

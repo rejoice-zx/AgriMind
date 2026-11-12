@@ -357,7 +357,9 @@ function openEditCrop(field: FieldItem) {
 }
 
 async function submitCreateCrop() {
-  if (!targetFieldForCrop.value) return
+  // 防止双击创建两个活跃批次（BUG-027）
+  if (!targetFieldForCrop.value || mutationBusy.value) return
+  mutationBusy.value = true
   try {
     if (editingCropId.value) await updateCropPlanting(editingCropId.value, cropForm.value)
     else await createCropPlanting(targetFieldForCrop.value.id, cropForm.value)
@@ -366,7 +368,7 @@ async function submitCreateCrop() {
     await fetchFields()
   } catch (err: any) {
     ElMessage.error(err.response?.data?.detail || '创建作物档案失败')
-  }
+  } finally { mutationBusy.value = false }
 }
 
 // ==================== 农事记录管理 ====================
@@ -780,7 +782,7 @@ onMounted(() => {
       </el-form>
       <template #footer>
         <el-button @click="cropDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="submitCreateCrop">保存档案</el-button>
+        <el-button type="primary" :loading="mutationBusy" :disabled="mutationBusy" @click="submitCreateCrop">保存档案</el-button>
       </template>
     </el-dialog>
 

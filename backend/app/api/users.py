@@ -8,6 +8,7 @@
 - 密码重置
 """
 
+import asyncio
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, update
@@ -24,7 +25,7 @@ from app.core.roles import is_admin
 import uuid
 import logging
 from pydantic import BaseModel, Field, EmailStr
-from app.schemas.contact import PhoneNumber
+from app.schemas.contact import PhoneNumber, PasswordText
 from app.utils.time import utcnow
 
 
@@ -62,7 +63,8 @@ class UserListResponse(BaseModel):
 class CreateUserRequest(BaseModel):
     """创建用户请求"""
     username: str = Field(..., min_length=3, max_length=50)
-    password: str = Field(..., min_length=6)
+    password: PasswordText
+
     display_name: str = Field(..., min_length=1, max_length=100)
     email: Optional[EmailStr] = None
     phone: PhoneNumber
@@ -80,7 +82,18 @@ class UpdateUserRequest(BaseModel):
 
 class ResetPasswordRequest(BaseModel):
     """重置密码请求"""
-    password: str = Field(..., min_length=6)
+    password: PasswordText
+
+
+
+def _guard_other_admin(target: User, current_user: User, action: str) -> None:
+    """Only the super administrator may reset, disable or demote another administrator (BUG-020).
+
+    Mirrors the existing delete rule, so an ordinary administrator cannot take over the
+    super administrator account by resetting its password or demoting it.
+    """
+    if target.id != current_user.id and is_admin(target) and current_user.username != "admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=f"只有超级管理员才能对其他管理员执行此操作（{action.rstrip('：')}）")
 
 
 # ==================== API Endpoints ====================
@@ -269,6 +282,9 @@ async def update_user(
     if 'phone' in request.model_fields_set and request.phone is None:
         raise HTTPException(422, '联系电话不能为空')
     
+    if (request.role is not None and request.role != user.role) or request.is_active is False:
+        _guard_other_admin(user, current_user, "修改角色或停用")
+
     # 不允许修改自己的角色和状态
     if user.id == current_user.id:
         if request.role is not None and request.role != user.role:
@@ -474,7 +490,8 @@ async def reset_password(
             detail="用户不存在"
         )
     
-    user.password_hash = AuthService.hash_password(request.password)
+    _guard_other_admin(user, current_user, "重置密码：")
+    user.password_hash = await asyncio.to_thread(AuthService.hash_password, request.password)
     user.auth_subject = str(uuid.uuid4())
     await db.commit()
     await db.refresh(user)

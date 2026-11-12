@@ -1,0 +1,19 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "audit-backend",
+      "runtimeExecutable": "scratch/venv/Scripts/python.exe",
+      "runtimeArgs": ["scratch/ui-audit/start_backend.py"],
+      "port": 8100,
+      "autoPort": false
+    },
+    {
+      "name": "audit-frontend",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["frontend/node_modules/vite/bin/vite.js", "--config", "frontend/node_modules/.agri-audit/vite.audit.config.mjs"],
+      "port": 3100,
+      "autoPort": false
+    }
+  ]
+}

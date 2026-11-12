@@ -251,8 +251,12 @@ class RAGService:
 
     # ==================== Token 提取 ====================
 
-    def _extract_tokens(self, text: str) -> List[str]:
-        """提取文本中的 token（英文词 + 中文 bigram）"""
+    def _extract_tokens(self, text: str, corpus: bool = False) -> List[str]:
+        """提取文本中的 token（英文词 + 中文 bigram）。
+
+        查询侧去重并截断（避免长问题稀释）；语料侧（corpus=True）保留全文 bigram 与词频，
+        否则答案后半段和拼在末尾的 keywords 会被截掉，BM25 的 tf/长度归一化失效（BUG-004）。
+        """
         s = (text or "").strip()
         if not s:
             return []
@@ -266,8 +270,10 @@ class RAGService:
             if not seg:
                 continue
             tokens.append(seg)
-            for i in range(min(len(seg) - 1, 12)):
+            for i in range(len(seg) - 1 if corpus else min(len(seg) - 1, 12)):
                 tokens.append(seg[i:i + 2])
+        if corpus:
+            return tokens
 
         seen: Set[str] = set()
         uniq: List[str] = []
@@ -452,26 +458,30 @@ class RAGService:
 
         # 对所有条目提取 token 构建语料
         corpus_tokens = [
-            self._extract_tokens(f"{it.get('question', '')} {it.get('answer', '')} {' '.join(it.get('keywords', []))}")
+            self._extract_tokens(f"{it.get('question', '')} {it.get('answer', '')} {' '.join(it.get('keywords', []))}", corpus=True)
             for it in knowledge_items
         ]
 
         bm25 = BM25Okapi(corpus_tokens)
         raw_scores = bm25.get_scores(query_tokens)
 
-        # 基于查询中所有 token 的有效 IDF 和计算理论满分基准，防止仅命中 1 个词被虚假归一化为 1.0
+        # 归一化：IDF 加权的查询词覆盖率（绝对量，通用词贡献小）为主，本批候选内的相对 BM25 为辅。
+        # 旧实现除以"理论满分"，真实命中只有 0.2~0.4，叠加严格阈值后降级路径几乎零召回（BUG-005）。
         query_idf_sum = sum(max(0.0, bm25.idf.get(t, 0.0)) for t in query_tokens)
-        max_theoretical = max(1.0, (bm25.k1 + 1.0) * query_idf_sum)
+        max_raw = max(raw_scores) if raw_scores else 0.0
 
         scores_map: Dict[str, float] = {}
+        if query_idf_sum <= 0 or max_raw <= 0:
+            return scores_map
 
         for idx, it in enumerate(knowledge_items):
             kid = it.get("id")
-            if not kid:
+            if not kid or raw_scores[idx] <= 0:
                 continue
-            # 严格依据理论满分上限进行打分归一化
-            norm_score = min(1.0, max(0.0, raw_scores[idx] / max_theoretical))
-            scores_map[kid] = norm_score
+            terms = bm25.doc_freqs[idx]
+            coverage = sum(max(0.0, bm25.idf.get(t, 0.0)) for t in query_tokens if t in terms) / query_idf_sum
+            relative = raw_scores[idx] / max_raw
+            scores_map[kid] = min(1.0, max(0.0, 0.7 * coverage + 0.3 * relative))
 
         return scores_map
 
@@ -486,6 +496,7 @@ class RAGService:
         top_k: int = 5,
         strict_threshold: bool = False,
         eligibility_date: Optional[date] = None,
+        preferred_stage: Optional[str] = None,
     ) -> RAGSearchResult:
         """
         基于实体抽取、意图路由、元数据前置过滤、向量检索与 BM25 加权融合的 Hybrid RAG
@@ -620,7 +631,8 @@ class RAGService:
             if has_vector_service:
                 base_score = 0.55 * v_score + 0.35 * b_score
             else:
-                base_score = 0.80 * b_score
+                # 仅关键词路径：稀疏得分已是 0~1 的覆盖率尺度，不再额外打折。
+                base_score = b_score
 
             # 关键词覆盖度加成
             kw_bonus = self._keyword_coverage_bonus(query, item)
@@ -630,7 +642,7 @@ class RAGService:
 
             # 元数据精准契合加成（物候期、病害实体匹配加成）
             meta_bonus = 0.0
-            target_stage = combined_filter.get("growth_stage") or entities.get("growth_stage")
+            target_stage = combined_filter.get("growth_stage") or preferred_stage or entities.get("growth_stage")
             if target_stage and metadata_matches(item, 'growth_stage', target_stage, combined_filter.get('crop')):
                 meta_bonus += 0.06
             target_disease = combined_filter.get("disease") or entities.get("disease")

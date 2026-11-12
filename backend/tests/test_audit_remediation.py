@@ -9,7 +9,7 @@ import pytest_asyncio
 from app.models.user import User
 from app.models.farm import Farm
 from app.core.weather_policy import agriculture_today
-from app.core.pesticide_standards import find_all_banned_pesticides, lookup_pesticide_standard
+from app.core.pesticide_standards import find_all_banned_pesticides
 from app.core.knowledge_contract import validate_effective_dates, source_quarantined
 from app.models.crop import CropPlanting
 from app.models.field import Field
@@ -39,8 +39,10 @@ def test_restricted_names_and_mixtures_are_not_masked(name):
     assert name in find_all_banned_pesticides('禁止使用' + name)  # detection is not a recommendation
 
 
-def test_unknown_formulation_does_not_inherit_phi():
-    assert lookup_pesticide_standard('其他浓度与剂型嘧菌酯') is None
+def test_unverified_phi_reference_table_was_removed():
+    import app.core.pesticide_standards as standards
+    # PHI comes only from the product label recorded by the farmer, never from a built-in table.
+    assert not hasattr(standards, 'PESTICIDE_PHI_STANDARDS') and not hasattr(standards, 'lookup_pesticide_standard')
 
 
 @pytest.mark.asyncio

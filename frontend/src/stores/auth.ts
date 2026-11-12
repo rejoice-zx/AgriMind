@@ -61,9 +61,15 @@ export const useAuthStore = defineStore('auth', () => {
     localStorage.setItem(USER_KEY, JSON.stringify(userData))
   }
 
-  function setToken(accessToken: string) {
+  function setToken(accessToken: string, rotatedRefresh?: string) {
     token.value = accessToken
     localStorage.setItem(TOKEN_KEY, accessToken)
+    // The server issues a fresh refresh token on every refresh; keep it so an active session
+    // is not forced to log out when the original login token expires (BUG-021).
+    if (rotatedRefresh) {
+      refreshToken.value = rotatedRefresh
+      localStorage.setItem(REFRESH_TOKEN_KEY, rotatedRefresh)
+    }
   }
 
   function setError(errorMessage: string | null) {

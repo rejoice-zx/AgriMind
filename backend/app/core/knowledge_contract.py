@@ -6,8 +6,11 @@ import json
 from fastapi import HTTPException
 
 METADATA_KEYS = frozenset({'crop', 'growth_stage', 'topic', 'disease', 'region'})
-STAGE_GROUPS = (('开花期', '坐果期', '开花坐果期'), ('膨果期', '果实膨大期', '膨果转色期'))
-ALL_STAGES = frozenset({'全生育期', '全生长期', '各生育期'})
+STAGE_GROUPS = (('开花期', '坐果期', '开花坐果期'), ('膨果期', '果实膨大期', '膨果转色期'),
+                ('苗期', '育苗期', '缓苗期'), ('采收期', '采收盛期'))
+ALL_STAGES = frozenset({'全生育期', '全生长期', '各生育期', '通用'})
+# Region labels meaning "not region-specific"; an empty region stays unknown and is excluded.
+NATIONWIDE_REGIONS = frozenset({'全国', '全国通用', '通用'})
 
 
 def _value(item, key):
@@ -44,7 +47,7 @@ def region_values(requested):
         elif requested.startswith(short):
             variants.add(full + requested[len(short):])
     provinces = {name for pair in _province_names() for name in pair}
-    accepted = {'全国', '全国通用'}
+    accepted = set(NATIONWIDE_REGIONS)
     for variant in variants:
         accepted.add(variant)
         for length in range(2, len(variant)):
